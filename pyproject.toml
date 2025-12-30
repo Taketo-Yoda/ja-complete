@@ -1,0 +1,61 @@
+[project]
+name = "ja-complete"
+version = "0.1.0"
+description = "Lightweight offline Japanese input completion library"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Taketo Yoda", email = "exhaust7.drs@gmail.com"}
+]
+keywords = ["japanese", "completion", "input-method", "ime", "nlp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing :: Linguistic",
+]
+dependencies = [
+    "janome>=0.5.0",
+    "pydantic>=2.12.5",
+]
+
+[project.scripts]
+ja-complete = "ja_complete.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Taketo-Yoda/ja-complete"
+Repository = "https://github.com/Taketo-Yoda/ja-complete"
+Issues = "https://github.com/Taketo-Yoda/ja-complete/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ja_complete"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.14.10",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
