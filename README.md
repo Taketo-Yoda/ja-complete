@@ -208,6 +208,26 @@ This hybrid approach ensures that:
 - Semantically relevant phrases (containing your key words) rank higher
 - Shorter, more relevant completions aren't penalized unfairly
 
+## Security Considerations
+
+**Important: Pickle Security Warning**
+
+N-gram models are serialized using Python's `pickle` module. **Pickle files can execute arbitrary code when loaded.**
+
+- ⚠️ Only load model files from trusted sources
+- ⚠️ Do not load `.pkl` files from unknown or untrusted origins
+- ⚠️ Loading custom models will display a security warning
+
+```python
+# Safe: Using default model (included with package)
+completer = JaCompleter()
+
+# Warning: Loading custom model (only use trusted files!)
+completer.load_ngram_model("custom_model.pkl")  # Shows security warning
+```
+
+For more details, see [DEVELOPING.md](DEVELOPING.md#セキュリティ).
+
 ## Building Custom N-gram Model
 
 For advanced users who want to build their own N-gram model:

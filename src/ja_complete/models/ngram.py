@@ -5,6 +5,7 @@
 """
 
 import pickle
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -50,13 +51,44 @@ class NgramModel(CompletionModel):
 
         Raises:
             FileNotFoundError: モデルファイルが存在しない場合
+
+        セキュリティ警告:
+            このメソッドはpickle.load()を使用しており、任意のコードを実行できます。
+            信頼できるソースからのモデルファイルのみを読み込んでください。
+            信頼できない、または不明な出所のモデルを読み込まないでください。
         """
         model_file = Path(path)
         if not model_file.exists():
             raise FileNotFoundError(f"Model file not found: {path}")
 
+        # Warn about pickle security risk when loading non-default models
+        default_model = Path(__file__).parent.parent / "data" / "default_ngram.pkl"
+        if model_file.resolve() != default_model.resolve():
+            warnings.warn(
+                f"Loading model from {path}. "
+                "WARNING: Pickle files can execute arbitrary code. "
+                "Only load models from trusted sources.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
         with open(model_file, "rb") as f:
             model = pickle.load(f)
+
+        # Validate model structure
+        if not isinstance(model, dict):
+            raise ValueError(f"Invalid model format: expected dict, got {type(model)}")
+
+        # Warn if model is missing expected keys (but still allow loading)
+        expected_keys = {"unigrams", "bigrams", "trigrams"}
+        missing_keys = expected_keys - set(model.keys())
+        if missing_keys:
+            warnings.warn(
+                f"Model is missing optional keys: {missing_keys}. "
+                "These will be initialized as empty.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
         self.unigrams = model.get("unigrams", {})
         self.bigrams = model.get("bigrams", {})
