@@ -220,7 +220,10 @@ extract_wiki_text.py
 # Test and backup files
 test_model.pkl
 bk/
+/tmp/test_*.py
 
 # Large model files (keep compressed versions only)
 *_original.pkl
 *_uncompressed.pkl
+*_medium.pkl
+*_large.pkl
