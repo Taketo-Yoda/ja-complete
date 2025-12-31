@@ -4,7 +4,6 @@ import pytest
 from pydantic import ValidationError
 
 from ja_complete.models.simple import SimpleDictModel
-from ja_complete.types import SuggestionList
 
 
 class TestSimpleDictModelInitialization:

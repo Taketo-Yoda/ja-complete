@@ -39,7 +39,7 @@ def compress_model(
     trigrams = model.get("trigrams", {})
 
     if verbose:
-        print(f"Original model statistics:")
+        print("Original model statistics:")
         print(f"  Unigrams: {len(unigrams):,}")
         print(f"  Bigrams: {len(bigrams):,}")
         print(f"  Trigrams: {len(trigrams):,}")
@@ -76,10 +76,15 @@ def compress_model(
                 filtered_trigrams[context] = filtered_next
 
     if verbose:
-        print(f"\nFiltered model statistics:")
-        print(f"  Unigrams: {len(filtered_unigrams):,} ({len(filtered_unigrams)/len(unigrams)*100:.1f}%)")
-        print(f"  Bigrams: {len(filtered_bigrams):,} ({len(filtered_bigrams)/len(bigrams)*100:.1f}% if bigrams else 0)")
-        print(f"  Trigrams: {len(filtered_trigrams):,} ({len(filtered_trigrams)/len(trigrams)*100:.1f}% if trigrams else 0)")
+        print("\nFiltered model statistics:")
+        unigram_pct = len(filtered_unigrams) / len(unigrams) * 100
+        print(f"  Unigrams: {len(filtered_unigrams):,} ({unigram_pct:.1f}%)")
+
+        bigram_pct = len(filtered_bigrams) / len(bigrams) * 100 if bigrams else 0
+        print(f"  Bigrams: {len(filtered_bigrams):,} ({bigram_pct:.1f}%)")
+
+        trigram_pct = len(filtered_trigrams) / len(trigrams) * 100 if trigrams else 0
+        print(f"  Trigrams: {len(filtered_trigrams):,} ({trigram_pct:.1f}%)")
 
     # 圧縮されたモデルを保存
     compressed_model = {
@@ -100,7 +105,7 @@ def compress_model(
     compression_ratio = (1 - compressed_size / original_size) * 100
 
     if verbose:
-        print(f"\nCompression results:")
+        print("\nCompression results:")
         print(f"  Original size: {original_size / 1024 / 1024:.1f} MB")
         print(f"  Compressed size: {compressed_size / 1024 / 1024:.1f} MB")
         print(f"  Reduction: {compression_ratio:.1f}%")
