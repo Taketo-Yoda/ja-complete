@@ -1,8 +1,10 @@
 """Comprehensive tests for SimpleDictModel."""
 
 import pytest
+from pydantic import ValidationError
 
 from ja_complete.models.simple import SimpleDictModel
+from ja_complete.types import SuggestionList
 
 
 class TestSimpleDictModelInitialization:
@@ -97,8 +99,8 @@ class TestSuggest:
         results = model.suggest("あり", top_k=10)
 
         assert len(results) == 2
-        assert results[0]["text"] in ["ありがとう", "ありがとうございます"]
-        assert results[1]["text"] in ["ありがとう", "ありがとうございます"]
+        assert results[0].text in ["ありがとう", "ありがとうございます"]
+        assert results[1].text in ["ありがとう", "ありがとうございます"]
 
     def test_exact_match_score(self):
         """Test exact prefix match has score of 1.0."""
@@ -108,7 +110,7 @@ class TestSuggest:
         results = model.suggest("お", top_k=10)
 
         assert len(results) == 1
-        assert results[0]["score"] == 1.0
+        assert results[0].score == 1.0
 
     def test_partial_prefix_match(self):
         """Test partial prefix match with fallback."""
@@ -119,7 +121,7 @@ class TestSuggest:
         results = model.suggest("おは", top_k=10)
 
         assert len(results) == 2
-        assert results[0]["score"] < 1.0  # Lower score for partial match
+        assert results[0].score < 1.0  # Lower score for partial match
 
     def test_partial_match_score_calculation(self):
         """Test partial prefix match score calculation."""
@@ -130,7 +132,7 @@ class TestSuggest:
 
         # Score should be length ratio: 1 / 2 = 0.5
         assert len(results) == 1
-        assert results[0]["score"] == pytest.approx(0.5, abs=0.01)
+        assert results[0].score == pytest.approx(0.5, abs=0.01)
 
     def test_no_match_returns_empty(self):
         """Test that no match returns empty list."""
@@ -139,7 +141,7 @@ class TestSuggest:
 
         results = model.suggest("あ", top_k=10)
 
-        assert results == []
+        assert len(results) == 0
 
     def test_top_k_limit(self):
         """Test top_k parameter limits results."""
@@ -170,19 +172,19 @@ class TestSuggest:
             model.suggest("", top_k=10)
 
     def test_zero_top_k_raises_error(self):
-        """Test top_k=0 raises ValueError."""
+        """Test top_k=0 raises ValidationError."""
         model = SimpleDictModel()
         model.add_suggestions({"お": ["おはよう"]})
 
-        with pytest.raises(ValueError, match="top_k must be positive"):
+        with pytest.raises(ValidationError, match="greater than or equal to 1"):
             model.suggest("お", top_k=0)
 
     def test_negative_top_k_raises_error(self):
-        """Test negative top_k raises ValueError."""
+        """Test negative top_k raises ValidationError."""
         model = SimpleDictModel()
         model.add_suggestions({"お": ["おはよう"]})
 
-        with pytest.raises(ValueError, match="top_k must be positive"):
+        with pytest.raises(ValidationError, match="greater than or equal to 1"):
             model.suggest("お", top_k=-1)
 
     def test_suggest_on_empty_model(self):
@@ -190,7 +192,7 @@ class TestSuggest:
         model = SimpleDictModel()
         results = model.suggest("test", top_k=10)
 
-        assert results == []
+        assert len(results) == 0
 
     def test_fallback_to_shorter_prefix(self):
         """Test fallback to progressively shorter prefixes."""
@@ -201,7 +203,7 @@ class TestSuggest:
         results = model.suggest("あり", top_k=10)
 
         assert len(results) == 1
-        assert results[0]["text"] == "ありがとう"
+        assert results[0].text == "ありがとう"
 
     def test_fallback_score_decreases_with_length(self):
         """Test that fallback score decreases as prefix gets shorter."""
@@ -212,7 +214,7 @@ class TestSuggest:
         results = model.suggest("あり", top_k=10)
 
         # Score should be 1/2 = 0.5
-        assert results[0]["score"] == pytest.approx(0.5, abs=0.01)
+        assert results[0].score == pytest.approx(0.5, abs=0.01)
 
     def test_multiple_fallback_levels(self):
         """Test fallback through multiple prefix lengths."""
@@ -224,7 +226,7 @@ class TestSuggest:
 
         assert len(results) == 1
         # Score should be 1/3 = 0.333...
-        assert results[0]["score"] == pytest.approx(1.0 / 3.0, abs=0.01)
+        assert results[0].score == pytest.approx(1.0 / 3.0, abs=0.01)
 
     def test_exact_match_preferred_over_fallback(self):
         """Test that exact match is preferred over fallback."""
@@ -235,8 +237,8 @@ class TestSuggest:
         results = model.suggest("おは", top_k=10)
 
         # Should get exact match with score 1.0
-        assert results[0]["text"] == "おはようございます"
-        assert results[0]["score"] == 1.0
+        assert results[0].text == "おはようございます"
+        assert results[0].score == 1.0
 
     def test_result_dictionary_structure(self):
         """Test that result dictionaries have correct structure."""
@@ -246,10 +248,10 @@ class TestSuggest:
         results = model.suggest("お", top_k=10)
 
         assert len(results) == 1
-        assert "text" in results[0]
-        assert "score" in results[0]
-        assert isinstance(results[0]["text"], str)
-        assert isinstance(results[0]["score"], float)
+        assert hasattr(results[0], "text")
+        assert hasattr(results[0], "score")
+        assert isinstance(results[0].text, str)
+        assert isinstance(results[0].score, float)
 
 
 class TestSimpleDictModelEdgeCases:
@@ -263,7 +265,7 @@ class TestSimpleDictModelEdgeCases:
         results = model.suggest("私", top_k=10)
 
         assert len(results) == 1
-        assert results[0]["score"] == 1.0
+        assert results[0].score == 1.0
 
     def test_long_prefix(self):
         """Test with long prefix."""
@@ -274,7 +276,7 @@ class TestSimpleDictModelEdgeCases:
         results = model.suggest(long_prefix, top_k=10)
 
         assert len(results) == 1
-        assert results[0]["score"] == 1.0
+        assert results[0].score == 1.0
 
     def test_hiragana_prefix(self):
         """Test with hiragana prefix."""
@@ -356,8 +358,9 @@ class TestSimpleDictModelEdgeCases:
 
         results = model.suggest("test", top_k=10)
 
-        # Both should be returned
-        assert len(results) == 2
+        # Empty strings are filtered out, only valid one returned
+        assert len(results) == 1
+        assert results[0].text == "valid"
 
     def test_duplicate_suggestions_in_list(self):
         """Test handling of duplicate suggestions."""
@@ -386,11 +389,11 @@ class TestSimpleDictModelEdgeCases:
 
         # Test exact match
         results = model.suggest("お", top_k=10)
-        assert all(0.0 <= r["score"] <= 1.0 for r in results)
+        assert all(0.0 <= r.score <= 1.0 for r in results.items)
 
         # Test partial match
         results = model.suggest("おはよ", top_k=10)
-        assert all(0.0 <= r["score"] <= 1.0 for r in results)
+        assert all(0.0 <= r.score <= 1.0 for r in results.items)
 
     def test_fallback_stops_at_length_one(self):
         """Test that fallback doesn't go below length 1."""
@@ -401,7 +404,7 @@ class TestSimpleDictModelEdgeCases:
         results = model.suggest("xyz", top_k=10)
 
         # Should return empty since no prefix matches
-        assert results == []
+        assert len(results) == 0
 
     def test_whitespace_in_prefix(self):
         """Test handling of whitespace in prefix."""
@@ -461,9 +464,9 @@ class TestSimpleDictModelDocExamples:
         # Test first prefix
         results = model.suggest("お", top_k=10)
         assert len(results) == 3
-        assert all(r["text"] in ["おはよう", "おやすみ", "お疲れ様"] for r in results)
+        assert all(r.text in ["おはよう", "おやすみ", "お疲れ様"] for r in results.items)
 
         # Test second prefix
         results = model.suggest("あり", top_k=10)
         assert len(results) == 2
-        assert all(r["text"] in ["ありがとう", "ありがとうございます"] for r in results)
+        assert all(r.text in ["ありがとう", "ありがとうございます"] for r in results.items)

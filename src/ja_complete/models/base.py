@@ -6,7 +6,8 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
+
+from ja_complete.types import SuggestionList, TopK
 
 
 class CompletionModel(ABC):
@@ -18,21 +19,19 @@ class CompletionModel(ABC):
     """
 
     @abstractmethod
-    def suggest(self, input_text: str, top_k: int = 10) -> list[dict[str, Any]]:
+    def suggest(self, input_text: str, top_k: TopK = 10) -> SuggestionList:
         """
         入力テキストの補完候補を生成する。
 
         Args:
             input_text: ユーザー入力テキスト
-            top_k: 返す候補の最大数
+            top_k: 返す候補の最大数（1〜1000）
 
         Returns:
-            以下のキーを持つ辞書のリスト:
-                - 'text' (str): 補完テキスト
-                - 'score' (float): [0, 1]の範囲のスコア、高いほど良い
-            スコアの降順でソート済み
+            SuggestionList: スコアの降順でソート済みの補完候補リスト
 
         Raises:
-            ValueError: input_textが空、またはtop_k <= 0の場合
+            ValidationError: top_kが1〜1000の範囲外の場合
+            ValueError: input_textが空の場合
         """
         pass

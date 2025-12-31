@@ -5,12 +5,14 @@
 """
 
 import json
-from typing import Any
+
+from pydantic import validate_call
 
 from ja_complete import tokenizer
 from ja_complete.models.ngram import NgramModel
 from ja_complete.models.phrase import PhraseModel
 from ja_complete.models.simple import SimpleDictModel
+from ja_complete.types import SuggestionList, TopK
 
 
 class JaCompleter:
@@ -60,7 +62,7 @@ class JaCompleter:
 
     def suggest_from_phrases(
         self, input_text: str, top_k: int = 10, fallback_to_ngram: bool | None = None
-    ) -> list[dict[str, Any]]:
+    ) -> SuggestionList:
         """
         オプションのN-gramフォールバック付きでフレーズモデルから補完を取得する。
 
@@ -71,7 +73,7 @@ class JaCompleter:
                              Noneの場合、インスタンス設定を使用。
 
         Returns:
-            'text'と'score'キーを持つ補完辞書のリスト
+            SuggestionList: スコアの降順でソート済みの補完候補リスト
 
         動作:
             1. フレーズモデルから補完の取得を試みる
@@ -100,16 +102,20 @@ class JaCompleter:
         """
         self._ngram_model = NgramModel(model_path)
 
-    def suggest_from_ngram(self, input_text: str, top_k: int = 10) -> list[dict[str, Any]]:
+    @validate_call
+    def suggest_from_ngram(self, input_text: str, top_k: TopK = 10) -> SuggestionList:
         """
         N-gramモデルのみから補完を取得する。
 
         Args:
             input_text: ユーザー入力テキスト
-            top_k: 候補の最大数
+            top_k: 候補の最大数（1〜1000）
 
         Returns:
-            'text'と'score'キーを持つ補完辞書のリスト
+            SuggestionList: スコアの降順でソート済みの補完候補リスト
+
+        Raises:
+            ValidationError: top_kが1〜1000の範囲外の場合
         """
         return self._ngram_model.suggest(input_text, top_k)
 
@@ -132,7 +138,7 @@ class JaCompleter:
 
     def suggest_from_simple(
         self, input_text: str, top_k: int = 10, fallback_to_ngram: bool | None = None
-    ) -> list[dict[str, Any]]:
+    ) -> SuggestionList:
         """
         オプションのN-gramフォールバック付きで単純辞書から補完を取得する。
 
@@ -143,7 +149,7 @@ class JaCompleter:
                              Noneの場合、インスタンス設定を使用。
 
         Returns:
-            'text'と'score'キーを持つ補完辞書のリスト
+            SuggestionList: スコアの降順でソート済みの補完候補リスト
 
         動作:
             1. 単純辞書から補完の取得を試みる

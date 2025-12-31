@@ -1,0 +1,50 @@
+Creative Commons Attribution-ShareAlike 3.0 Unported License
+================================================================
+
+The N-gram model files (*.pkl) in this project are licensed under the
+Creative Commons Attribution-ShareAlike 3.0 Unported License.
+
+Full license text: https://creativecommons.org/licenses/by-sa/3.0/legalcode
+
+Summary
+-------
+
+You are free to:
+  * Share — copy and redistribute the material in any medium or format
+  * Adapt — remix, transform, and build upon the material for any purpose,
+    even commercially
+
+Under the following terms:
+  * Attribution — You must give appropriate credit, provide a link to the
+    license, and indicate if changes were made. You may do so in any
+    reasonable manner, but not in any way that suggests the licensor
+    endorses you or your use.
+
+  * ShareAlike — If you remix, transform, or build upon the material, you
+    must distribute your contributions under the same license as the original.
+
+  * No additional restrictions — You may not apply legal terms or technological
+    measures that legally restrict others from doing anything the license permits.
+
+Attribution for Default N-gram Model
+-------------------------------------
+
+The default N-gram model (src/ja_complete/data/default_ngram.pkl) is derived
+from Japanese Wikipedia data:
+
+  Source: Japanese Wikipedia (https://ja.wikipedia.org/)
+  License: CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/)
+  Copyright: © Wikipedia contributors
+  Data extracted: 2025
+  Dataset: Subset of approximately 100,000 articles from jawiki-latest-pages-articles.xml.bz2
+
+  This model contains statistical information (word frequencies and n-gram
+  probabilities) derived from Wikipedia articles. It does not contain the
+  original article text.
+
+To comply with the CC BY-SA 3.0 license when distributing or modifying this
+model, you must:
+  1. Provide appropriate attribution to Wikipedia
+  2. Indicate if you made changes to the model
+  3. Distribute any modified versions under CC BY-SA 3.0 or compatible license
+  4. Include a copy of or link to this license

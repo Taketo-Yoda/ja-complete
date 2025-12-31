@@ -1,8 +1,10 @@
 """Comprehensive tests for PhraseModel."""
 
 import pytest
+from pydantic import ValidationError
 
 from ja_complete.models.phrase import PhraseModel
+from ja_complete.types import SuggestionList
 
 
 class TestPhraseModelInitialization:
@@ -246,7 +248,7 @@ class TestSuggest:
         results = model.suggest("今日", top_k=10)
 
         assert len(results) == 2
-        assert all("text" in r and "score" in r for r in results)
+        assert all(hasattr(r, "text") and hasattr(r, "score") for r in results.items)
 
     def test_exact_prefix_match(self):
         """Test exact prefix match returns correct phrase."""
@@ -257,7 +259,7 @@ class TestSuggest:
         results = model.suggest("スマホの", top_k=10)
 
         assert len(results) > 0
-        assert results[0]["text"] == "スマホの買い換えと合わせて一式揃えたい"
+        assert results[0].text == "スマホの買い換えと合わせて一式揃えたい"
 
     def test_character_prefix_match(self):
         """Test single character prefix match."""
@@ -268,8 +270,8 @@ class TestSuggest:
         results = model.suggest("ス", top_k=10)
 
         assert len(results) == 2
-        assert any("スマホ" in r["text"] for r in results)
-        assert any("スイカ" in r["text"] for r in results)
+        assert any("スマホ" in r.text for r in results.items)
+        assert any("スイカ" in r.text for r in results.items)
 
     def test_no_match_returns_empty(self):
         """Test that no match returns empty list."""
@@ -279,7 +281,7 @@ class TestSuggest:
 
         results = model.suggest("明日", top_k=10)
 
-        assert results == []
+        assert len(results) == 0
 
     def test_top_k_limit(self):
         """Test top_k parameter limits results."""
@@ -305,7 +307,7 @@ class TestSuggest:
 
         # Scores should be in descending order
         for i in range(len(results) - 1):
-            assert results[i]["score"] >= results[i + 1]["score"]
+            assert results[i].score >= results[i + 1].score
 
     def test_empty_input_raises_error(self):
         """Test empty input raises ValueError."""
@@ -316,19 +318,19 @@ class TestSuggest:
             model.suggest("", top_k=10)
 
     def test_zero_top_k_raises_error(self):
-        """Test top_k=0 raises ValueError."""
+        """Test top_k=0 raises ValidationError."""
         model = PhraseModel()
         model.add_phrases(["今日はいい天気です"])
 
-        with pytest.raises(ValueError, match="top_k must be positive"):
+        with pytest.raises(ValidationError, match="greater than or equal to 1"):
             model.suggest("今日", top_k=0)
 
     def test_negative_top_k_raises_error(self):
-        """Test negative top_k raises ValueError."""
+        """Test negative top_k raises ValidationError."""
         model = PhraseModel()
         model.add_phrases(["今日はいい天気です"])
 
-        with pytest.raises(ValueError, match="top_k must be positive"):
+        with pytest.raises(ValidationError, match="greater than or equal to 1"):
             model.suggest("今日", top_k=-1)
 
     def test_suggest_on_empty_model(self):
@@ -336,7 +338,7 @@ class TestSuggest:
         model = PhraseModel()
         results = model.suggest("今日", top_k=10)
 
-        assert results == []
+        assert len(results) == 0
 
     def test_multiple_matches_ranking(self):
         """Test ranking with multiple matches."""
@@ -353,7 +355,7 @@ class TestSuggest:
         # Should have at least 2 results (スマートフォン might not match prefix)
         assert len(results) >= 2
         # Results should be scored and sorted
-        assert all(r["score"] > 0 for r in results)
+        assert all(r.score > 0 for r in results.items)
 
     def test_long_input_text(self):
         """Test with long input text."""
@@ -364,8 +366,8 @@ class TestSuggest:
         results = model.suggest("スマホの買い換えと合わせて", top_k=10)
 
         assert len(results) == 1
-        assert results[0]["text"] == phrase
-        assert results[0]["score"] > 0.5  # Should have high score
+        assert results[0].text == phrase
+        assert results[0].score > 0.5  # Should have high score
 
     def test_japanese_script_variations(self):
         """Test with different Japanese scripts."""
@@ -393,8 +395,8 @@ class TestSuggest:
 
         results = model.suggest("今日", top_k=10)
 
-        for result in results:
-            assert 0.0 <= result["score"] <= 1.0
+        for result in results.items:
+            assert 0.0 <= result.score <= 1.0
 
 
 class TestPhraseModelEdgeCases:
@@ -435,7 +437,7 @@ class TestPhraseModelEdgeCases:
 
         results = model.suggest("私", top_k=10)
         assert len(results) == 1
-        assert results[0]["text"] == "私"
+        assert results[0].text == "私"
 
     def test_identical_prefixes_different_phrases(self):
         """Test phrases with identical prefixes."""

@@ -205,3 +205,22 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Project specific
+# Wikipedia data and training files
+jawiki-*.xml.bz2
+training_data/
+extract_wiki_text.py
+
+# Test and backup files
+test_model.pkl
+bk/
+
+# Large model files (keep compressed versions only)
+*_original.pkl
+*_uncompressed.pkl

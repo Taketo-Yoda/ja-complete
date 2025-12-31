@@ -233,14 +233,20 @@ For more details, see [DEVELOPING.md](DEVELOPING.md#セキュリティ).
 For advanced users who want to build their own N-gram model:
 
 ```bash
+# Install gensim for Wikipedia extraction
+pip install gensim
+
 # Download Japanese Wikipedia dump
 wget https://dumps.wikimedia.org/jawiki/latest/jawiki-latest-pages-articles.xml.bz2
 
-# Extract text using WikiExtractor
-python -m wikiextractor.WikiExtractor jawiki-latest-pages-articles.xml.bz2 -o wiki_text/
+# Extract text using gensim (recommended for Python 3.13+)
+python extract_wiki_text.py
+
+# Or use WikiExtractor (Python 3.12 or earlier)
+# python -m wikiextractor.WikiExtractor jawiki-latest-pages-articles.xml.bz2 -o wiki_text/
 
 # Build N-gram model
-python scripts/build_ngram_model.py --input wiki_text/ --output my_model.pkl --verbose
+python scripts/build_ngram_model.py --input training_data/ --output my_model.pkl --verbose
 ```
 
 ## Contributing
@@ -249,4 +255,29 @@ Contributions are welcome! Please see [DEVELOPING.md](DEVELOPING.md) for develop
 
 ## License
 
-MIT
+This project uses a **dual licensing** approach:
+
+### Source Code - MIT License
+
+The source code is licensed under the [MIT License](LICENSE).
+
+```
+Copyright (c) 2025 Taketo Yoda
+```
+
+### N-gram Model Data - CC BY-SA 3.0
+
+The N-gram model files (`*.pkl`) are licensed under [CC BY-SA 3.0](LICENSE-CC-BY-SA.txt).
+
+The default model is trained on [Japanese Wikipedia](https://ja.wikipedia.org/) data:
+- Source: Japanese Wikipedia
+- License: [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)
+- Copyright: © Wikipedia contributors
+- Dataset: Subset of ~100,000 articles
+
+**Important**: If you distribute or modify the N-gram models, you must:
+1. Provide attribution to Wikipedia
+2. Indicate any changes made
+3. Distribute under CC BY-SA 3.0 or compatible license
+
+See [LICENSE-CC-BY-SA.txt](LICENSE-CC-BY-SA.txt) for full details.

@@ -5,10 +5,12 @@
 """
 
 from collections import defaultdict
-from typing import Any
+
+from pydantic import validate_call
 
 from ja_complete import tokenizer
 from ja_complete.models.base import CompletionModel
+from ja_complete.types import Suggestion, SuggestionList, TopK
 
 # スコアリング重み（ユースケースに応じて調整可能）
 PREFIX_WEIGHT = 0.6  # プレフィックスマッチング品質の重み
@@ -145,7 +147,8 @@ class PhraseModel(CompletionModel):
         total_score = prefix_score + morpheme_score
         return min(total_score, 1.0)  # 1.0で上限
 
-    def suggest(self, input_text: str, top_k: int = 10) -> list[dict[str, Any]]:
+    @validate_call
+    def suggest(self, input_text: str, top_k: TopK = 10) -> SuggestionList:
         """
         input_textにプレフィックスとしてマッチするフレーズを検索する。
 
@@ -155,18 +158,17 @@ class PhraseModel(CompletionModel):
 
         Args:
             input_text: ユーザー入力テキスト
-            top_k: 候補の最大数
+            top_k: 候補の最大数（1〜1000）
 
         Returns:
-            スコアの降順でソート済みの補完辞書のリスト
+            SuggestionList: スコアの降順でソート済みの補完候補リスト
 
         Raises:
-            ValueError: input_textが空、またはtop_k <= 0の場合
+            ValidationError: top_kが1〜1000の範囲外の場合
+            ValueError: input_textが空の場合
         """
         if not input_text:
             raise ValueError("input_text cannot be empty")
-        if top_k <= 0:
-            raise ValueError("top_k must be positive")
 
         # 候補フレーズを検索
         candidates = set()
@@ -182,14 +184,12 @@ class PhraseModel(CompletionModel):
                 candidates.add(phrase)
 
         # 候補をスコアリングしてランク付け
-        scored_results: list[dict[str, Any]] = []
+        suggestions: list[Suggestion] = []
         for phrase in candidates:
             score = self._calculate_score(input_text, phrase)
             if score > 0:
-                scored_results.append({"text": phrase, "score": score})
+                suggestions.append(Suggestion(text=phrase, score=score))
 
-        # スコアの降順でソートしてtop_kを返す
-        scored_results.sort(
-            key=lambda x: (-x["score"], x["text"])
-        )  # 安定性のためテキストで第二ソート
-        return scored_results[:top_k]
+        # SuggestionListでラップ（自動的にスコアでソートされる）してtop_kを返す
+        suggestion_list = SuggestionList(items=suggestions)
+        return SuggestionList(items=suggestion_list.top_k(top_k))

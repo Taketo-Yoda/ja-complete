@@ -95,7 +95,7 @@ def main() -> None:
             sys.exit(1)
 
         # 結果をJSON形式で出力
-        print(json.dumps(results, ensure_ascii=False, indent=2))
+        print(json.dumps(results.to_dict_list(), ensure_ascii=False, indent=2))
 
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)

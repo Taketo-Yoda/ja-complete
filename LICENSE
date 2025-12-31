@@ -1,4 +1,10 @@
-MIT License
+# Dual License
+
+This project uses a dual licensing approach:
+
+## 1. Source Code - MIT License
+
+The source code of this project is licensed under the MIT License.
 
 Copyright (c) 2025 Taketo Yoda
 
@@ -19,3 +25,18 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## 2. N-gram Model Data - CC BY-SA 3.0
+
+The N-gram model files (*.pkl) included in this project are derived from
+Wikipedia data and are licensed under the Creative Commons Attribution-ShareAlike
+3.0 Unported License (CC BY-SA 3.0).
+
+See LICENSE-CC-BY-SA.txt for the full license text.
+
+### Attribution
+
+The default N-gram model is trained on data from:
+- Japanese Wikipedia (https://ja.wikipedia.org/)
+- Licensed under CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/)
+- © Wikipedia contributors

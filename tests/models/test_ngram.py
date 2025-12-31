@@ -3,8 +3,10 @@
 import pickle
 
 import pytest
+from pydantic import ValidationError
 
 from ja_complete.models.ngram import SMOOTHING_ALPHA, NgramModel
+from ja_complete.types import SuggestionList
 
 
 class TestNgramModelInitialization:
@@ -198,7 +200,7 @@ class TestSuggest:
         model.vocabulary_size = 0
 
         results = model.suggest("今日", top_k=5)
-        assert results == []
+        assert len(results) == 0
 
     def test_suggest_basic(self):
         """Test basic suggestion functionality."""
@@ -211,10 +213,10 @@ class TestSuggest:
         results = model.suggest("今日", top_k=5)
 
         # Should return suggestions
-        assert isinstance(results, list)
-        for result in results:
-            assert "text" in result
-            assert "score" in result
+        assert isinstance(results, SuggestionList)
+        for result in results.items:
+            assert hasattr(result, "text")
+            assert hasattr(result, "score")
 
     def test_suggest_empty_input_raises_error(self):
         """Test that empty input raises ValueError."""
@@ -223,15 +225,15 @@ class TestSuggest:
             model.suggest("", top_k=5)
 
     def test_suggest_zero_top_k_raises_error(self):
-        """Test that top_k=0 raises ValueError."""
+        """Test that top_k=0 raises ValidationError."""
         model = NgramModel()
-        with pytest.raises(ValueError, match="top_k must be positive"):
+        with pytest.raises(ValidationError, match="greater than or equal to 1"):
             model.suggest("今日", top_k=0)
 
     def test_suggest_negative_top_k_raises_error(self):
-        """Test that negative top_k raises ValueError."""
+        """Test that negative top_k raises ValidationError."""
         model = NgramModel()
-        with pytest.raises(ValueError, match="top_k must be positive"):
+        with pytest.raises(ValidationError, match="greater than or equal to 1"):
             model.suggest("今日", top_k=-1)
 
     def test_suggest_returns_top_k_results(self):
@@ -256,7 +258,7 @@ class TestSuggest:
 
         if len(results) > 1:
             for i in range(len(results) - 1):
-                assert results[i]["score"] >= results[i + 1]["score"]
+                assert results[i].score >= results[i + 1].score
 
     def test_suggest_appends_to_input(self):
         """Test that suggestions append to input text."""
@@ -267,9 +269,9 @@ class TestSuggest:
 
         results = model.suggest("今日", top_k=5)
 
-        for result in results:
+        for result in results.items:
             # Completion should include original input
-            assert result["text"].startswith("今日")
+            assert result.text.startswith("今日")
 
     def test_suggest_with_no_tokenization_result(self):
         """Test suggest when tokenization returns empty."""
@@ -277,7 +279,7 @@ class TestSuggest:
         # Input that might not tokenize well
         results = model.suggest("   ", top_k=5)
         # Should handle gracefully (empty or minimal results)
-        assert isinstance(results, list)
+        assert isinstance(results, SuggestionList)
 
     def test_suggest_uses_trigram_when_available(self):
         """Test that trigram is used when history has 2 tokens."""
@@ -289,7 +291,7 @@ class TestSuggest:
 
         # Input that tokenizes to multiple tokens
         results = model.suggest("ab", top_k=5)
-        assert isinstance(results, list)
+        assert isinstance(results, SuggestionList)
 
     def test_suggest_uses_bigram_when_no_trigram(self):
         """Test that bigram is used when trigram not available."""
@@ -300,7 +302,7 @@ class TestSuggest:
         model.vocabulary_size = 2
 
         results = model.suggest("a", top_k=5)
-        assert isinstance(results, list)
+        assert isinstance(results, SuggestionList)
 
     def test_suggest_with_single_token_history(self):
         """Test suggestion with single token history."""
@@ -341,7 +343,7 @@ class TestNgramModelEdgeCases:
         model.vocabulary_size = 2
 
         results = model.suggest("test", top_k=5)
-        assert isinstance(results, list)
+        assert isinstance(results, SuggestionList)
 
     def test_model_with_only_bigrams(self):
         """Test model with only bigrams (no trigrams)."""
@@ -352,7 +354,7 @@ class TestNgramModelEdgeCases:
         model.vocabulary_size = 2
 
         results = model.suggest("a", top_k=5)
-        assert isinstance(results, list)
+        assert isinstance(results, SuggestionList)
 
     def test_very_long_input(self):
         """Test with very long input text."""
@@ -362,7 +364,7 @@ class TestNgramModelEdgeCases:
 
         long_input = "あ" * 1000
         results = model.suggest(long_input, top_k=5)
-        assert isinstance(results, list)
+        assert isinstance(results, SuggestionList)
 
     def test_single_character_input(self):
         """Test with single character input."""
@@ -372,7 +374,7 @@ class TestNgramModelEdgeCases:
         model.vocabulary_size = 2
 
         results = model.suggest("私", top_k=5)
-        assert isinstance(results, list)
+        assert isinstance(results, SuggestionList)
 
     def test_suggest_consistency(self):
         """Test that suggest returns consistent results."""
@@ -395,8 +397,8 @@ class TestNgramModelEdgeCases:
 
         results = model.suggest("a", top_k=10)
 
-        for result in results:
-            assert 0.0 <= result["score"] <= 1.0
+        for result in results.items:
+            assert 0.0 <= result.score <= 1.0
 
     def test_special_characters_in_model(self):
         """Test model with special characters."""
@@ -405,7 +407,7 @@ class TestNgramModelEdgeCases:
         model.vocabulary_size = 3
 
         results = model.suggest("test", top_k=5)
-        assert isinstance(results, list)
+        assert isinstance(results, SuggestionList)
 
     def test_numeric_tokens_in_model(self):
         """Test model with numeric tokens."""
@@ -415,7 +417,7 @@ class TestNgramModelEdgeCases:
         model.vocabulary_size = 2
 
         results = model.suggest("2024", top_k=5)
-        assert isinstance(results, list)
+        assert isinstance(results, SuggestionList)
 
     def test_mixed_script_model(self):
         """Test model with mixed scripts."""
@@ -424,7 +426,7 @@ class TestNgramModelEdgeCases:
         model.vocabulary_size = 4
 
         results = model.suggest("test", top_k=5)
-        assert isinstance(results, list)
+        assert isinstance(results, SuggestionList)
 
 
 class TestSmoothingAlpha:

@@ -4,9 +4,10 @@
 直接マッピングを提供する。最もシンプルな補完戦略。
 """
 
-from typing import Any
+from pydantic import validate_call
 
 from ja_complete.models.base import CompletionModel
+from ja_complete.types import Suggestion, SuggestionList, TopK
 
 
 class SimpleDictModel(CompletionModel):
@@ -37,7 +38,8 @@ class SimpleDictModel(CompletionModel):
         """
         self.suggestions.update(suggestions)
 
-    def suggest(self, input_text: str, top_k: int = 10) -> list[dict[str, Any]]:
+    @validate_call
+    def suggest(self, input_text: str, top_k: TopK = 10) -> SuggestionList:
         """
         単純辞書からプレフィックスマッチを返す。
 
@@ -49,36 +51,39 @@ class SimpleDictModel(CompletionModel):
 
         Args:
             input_text: ユーザー入力テキスト
-            top_k: 候補の最大数
+            top_k: 候補の最大数（1〜1000）
 
         Returns:
-            'text'と'score'キーを持つ補完辞書のリスト
+            SuggestionList: スコアの降順でソート済みの補完候補リスト
 
         Raises:
-            ValueError: input_textが空、またはtop_k <= 0の場合
+            ValidationError: top_kが1〜1000の範囲外の場合
+            ValueError: input_textが空の場合
         """
         if not input_text:
             raise ValueError("input_text cannot be empty")
-        if top_k <= 0:
-            raise ValueError("top_k must be positive")
 
-        results: list[dict[str, Any]] = []
+        suggestions: list[Suggestion] = []
 
         # まず完全プレフィックスマッチを試す
         if input_text in self.suggestions:
-            for text in self.suggestions[input_text][:top_k]:
-                results.append({"text": text, "score": 1.0})
-            return results
+            for text in self.suggestions[input_text]:
+                if text:  # Skip empty strings
+                    suggestions.append(Suggestion(text=text, score=1.0))
+            suggestion_list = SuggestionList(items=suggestions)
+            return SuggestionList(items=suggestion_list.top_k(top_k))
 
         # 徐々に短いプレフィックスを試す（フォールバック戦略）
         for length in range(len(input_text) - 1, 0, -1):
             prefix = input_text[:length]
             if prefix in self.suggestions:
-                for text in self.suggestions[prefix][:top_k]:
-                    # 部分プレフィックスマッチには低いスコア
-                    score = length / len(input_text)
-                    results.append({"text": text, "score": score})
-                return results
+                for text in self.suggestions[prefix]:
+                    if text:  # Skip empty strings
+                        # 部分プレフィックスマッチには低いスコア
+                        score = length / len(input_text)
+                        suggestions.append(Suggestion(text=text, score=score))
+                suggestion_list = SuggestionList(items=suggestions)
+                return SuggestionList(items=suggestion_list.top_k(top_k))
 
         # マッチが見つからなかった
-        return []
+        return SuggestionList(items=[])

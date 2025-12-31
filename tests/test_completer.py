@@ -3,6 +3,7 @@
 import pytest
 
 from ja_complete import JaCompleter
+from ja_complete.types import SuggestionList
 
 
 class TestJaCompleter:
@@ -27,12 +28,12 @@ class TestJaCompleter:
         # Test prefix match
         results = completer.suggest_from_phrases("ス", top_k=5, fallback_to_ngram=False)
         assert len(results) > 0
-        assert any("スマホ" in r["text"] for r in results)
+        assert any("スマホ" in r.text for r in results.items)
 
         # Test longer prefix
         results = completer.suggest_from_phrases("スマホの", fallback_to_ngram=False)
         assert len(results) > 0
-        assert results[0]["text"] == "スマホの買い換えと合わせて一式揃えたい"
+        assert results[0].text == "スマホの買い換えと合わせて一式揃えたい"
 
     def test_simple_dictionary_completion(self):
         """Test simple dictionary completion."""
@@ -46,8 +47,8 @@ class TestJaCompleter:
 
         results = completer.suggest_from_simple("あり", fallback_to_ngram=False)
         assert len(results) == 2
-        assert results[0]["text"] in ["ありがとう", "ありがとうございます"]
-        assert results[0]["score"] == 1.0
+        assert results[0].text in ["ありがとう", "ありがとうございます"]
+        assert results[0].score == 1.0
 
     def test_ngram_completion(self):
         """Test N-gram completion."""
@@ -67,14 +68,14 @@ class TestJaCompleter:
         # Query that doesn't match any phrase
         results = completer.suggest_from_phrases("今日", top_k=5)
         # Should get N-gram results as fallback
-        assert isinstance(results, list)
+        assert isinstance(results, SuggestionList)
 
         # Disable fallback
         completer_no_fallback = JaCompleter(enable_ngram_fallback=False)
         completer_no_fallback.add_phrases(["スマホを買う"])
         results = completer_no_fallback.suggest_from_phrases("今日", top_k=5)
         # Should get empty results
-        assert results == []
+        assert len(results) == 0
 
     def test_convert_to_jsonl(self):
         """Test JSONL conversion utility."""

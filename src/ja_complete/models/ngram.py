@@ -4,13 +4,16 @@
 ユーザー入力の可能性の高い継続を予測する。
 """
 
+import os
 import pickle
 import warnings
 from pathlib import Path
-from typing import Any
+
+from pydantic import validate_call
 
 from ja_complete import tokenizer
 from ja_complete.models.base import CompletionModel
+from ja_complete.types import Suggestion, SuggestionList, TopK
 
 # Laplaceスムージングパラメータ
 SMOOTHING_ALPHA = 1.0
@@ -24,22 +27,27 @@ class NgramModel(CompletionModel):
     より良い確率推定のためLaplaceスムージングを実装。
     """
 
-    def __init__(self, model_path: str | None = None) -> None:
+    def __init__(self, model_path: str | None = None, skip_default: bool = False) -> None:
         """
         N-gramモデルを初期化する。
 
         Args:
             model_path: pickleモデルファイルへのパス。
                        Noneの場合、パッケージデータからデフォルトモデルを読み込む。
+            skip_default: Trueの場合、デフォルトモデルのロードをスキップ（テスト用）。
+                         環境変数SKIP_DEFAULT_MODELが設定されている場合も同様。
         """
         self.unigrams: dict[str, int] = {}
         self.bigrams: dict[str, dict[str, int]] = {}
         self.trigrams: dict[tuple[str, str], dict[str, int]] = {}
         self.vocabulary_size: int = 0
 
+        # Check environment variable for test mode
+        skip_default = skip_default or os.getenv("SKIP_DEFAULT_MODEL") == "1"
+
         if model_path:
             self.load_model(model_path)
-        else:
+        elif not skip_default:
             self.load_default_model()
 
     def load_model(self, path: str) -> None:
@@ -149,7 +157,8 @@ class NgramModel(CompletionModel):
         prob = (count + SMOOTHING_ALPHA) / (total + SMOOTHING_ALPHA * self.vocabulary_size)
         return prob
 
-    def suggest(self, input_text: str, top_k: int = 10) -> list[dict[str, Any]]:
+    @validate_call
+    def suggest(self, input_text: str, top_k: TopK = 10) -> SuggestionList:
         """
         N-gram確率を使用して次の単語を予測する。
 
@@ -162,23 +171,22 @@ class NgramModel(CompletionModel):
 
         Args:
             input_text: ユーザー入力テキスト
-            top_k: 候補の最大数
+            top_k: 候補の最大数（1〜1000）
 
         Returns:
-            スコアの降順でソート済みの補完辞書のリスト
+            SuggestionList: スコアの降順でソート済みの補完候補リスト
 
         Raises:
-            ValueError: input_textが空、またはtop_k <= 0の場合
+            ValidationError: top_kが1〜1000の範囲外の場合
+            ValueError: input_textが空の場合
         """
         if not input_text:
             raise ValueError("input_text cannot be empty")
-        if top_k <= 0:
-            raise ValueError("top_k must be positive")
 
         # 入力をトークン化
         tokens = tokenizer.tokenize(input_text)
         if not tokens:
-            return []
+            return SuggestionList(items=[])
 
         # コンテキストを取得（最後の1-2トークン）
         history = tokens[-2:] if len(tokens) >= 2 else tokens[-1:]
@@ -209,11 +217,11 @@ class NgramModel(CompletionModel):
                 candidates[next_token] = prob
 
         # 補完を構築
-        results: list[dict[str, Any]] = []
+        suggestions: list[Suggestion] = []
         for next_token, prob in candidates.items():
             completion_text = input_text + next_token
-            results.append({"text": completion_text, "score": prob})
+            suggestions.append(Suggestion(text=completion_text, score=prob))
 
-        # 確率でソートしてtop_kを返す
-        results.sort(key=lambda x: -x["score"])
-        return results[:top_k]
+        # SuggestionListでラップ（自動的にソートされる）してtop_kを返す
+        suggestion_list = SuggestionList(items=suggestions)
+        return SuggestionList(items=suggestion_list.top_k(top_k))

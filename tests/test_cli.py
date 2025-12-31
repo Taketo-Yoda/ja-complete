@@ -58,7 +58,7 @@ class TestCLIPhrase:
         captured = capsys.readouterr()
         results = json.loads(captured.out)
         # Should return empty list (no fallback)
-        assert results == []
+        assert len(results) == 0
 
     def test_phrase_without_phrases_file(self, capsys):
         """Test phrase completion without phrases file."""
@@ -205,7 +205,7 @@ class TestCLISimple:
         captured = capsys.readouterr()
         results = json.loads(captured.out)
         # Should return empty list (no fallback)
-        assert results == []
+        assert len(results) == 0
 
     def test_simple_without_dict_file(self, capsys):
         """Test simple completion without dictionary file."""
@@ -554,7 +554,7 @@ class TestCLIEdgeCases:
 
         captured = capsys.readouterr()
         results = json.loads(captured.out)
-        assert results == []
+        assert len(results) == 0
 
     def test_single_result(self, tmp_path, capsys):
         """Test CLI when exactly one result is found."""
