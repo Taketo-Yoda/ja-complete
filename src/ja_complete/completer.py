@@ -5,6 +5,7 @@
 """
 
 import json
+from pathlib import Path
 
 from pydantic import validate_call
 
@@ -99,14 +100,26 @@ class JaCompleter:
         return results
 
     # N-gramメソッド
-    def load_ngram_model(self, model_path: str) -> None:
+    def load_ngram_model(self, model_path: str | Path) -> None:
         """
         カスタムN-gramモデルを読み込む。
 
         Args:
             model_path: pickle化されたN-gramモデルファイルへのパス
+
+        Raises:
+            FileNotFoundError: モデルファイルが存在しない場合
+            ValueError: ファイルがディレクトリの場合
         """
-        self._ngram_model = NgramModel(model_path)
+        model_path = Path(model_path)
+
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+
+        if model_path.is_dir():
+            raise ValueError(f"Expected file, got directory: {model_path}")
+
+        self._ngram_model = NgramModel(str(model_path))
 
     @validate_call
     def suggest_from_ngram(

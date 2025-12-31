@@ -1,5 +1,8 @@
 """Integration tests for JaCompleter."""
 
+import pickle
+from pathlib import Path
+
 import pytest
 
 from ja_complete import JaCompleter
@@ -116,3 +119,42 @@ class TestJaCompleter:
 
         with pytest.raises(ValueError):
             completer.suggest_from_phrases("テ", top_k=-1)
+
+    def test_load_ngram_model_file_not_found(self):
+        """Test load_ngram_model raises FileNotFoundError for non-existent file."""
+        completer = JaCompleter()
+
+        with pytest.raises(FileNotFoundError, match="Model file not found"):
+            completer.load_ngram_model("nonexistent_model.pkl")
+
+    def test_load_ngram_model_directory_error(self, tmp_path):
+        """Test load_ngram_model raises ValueError when given a directory."""
+        completer = JaCompleter()
+
+        # Create a temporary directory
+        test_dir = tmp_path / "test_dir"
+        test_dir.mkdir()
+
+        with pytest.raises(ValueError, match="Expected file, got directory"):
+            completer.load_ngram_model(str(test_dir))
+
+    def test_load_ngram_model_accepts_path_object(self, tmp_path):
+        """Test load_ngram_model accepts pathlib.Path objects."""
+        completer = JaCompleter()
+
+        # Create a temporary model file
+        model_file = tmp_path / "test_model.pkl"
+        model_data = {
+            "unigrams": {"今日": 10, "は": 8},
+            "bigrams": {"今日": {"は": 8}},
+            "trigrams": {},
+        }
+        with open(model_file, "wb") as f:
+            pickle.dump(model_data, f)
+
+        # Should accept Path object without error
+        completer.load_ngram_model(model_file)
+
+        # Verify the model was loaded
+        results = completer.suggest_from_ngram("今日", top_k=5)
+        assert isinstance(results, SuggestionList)
