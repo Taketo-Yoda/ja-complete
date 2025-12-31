@@ -1,7 +1,6 @@
 """Integration tests for JaCompleter."""
 
 import pickle
-from pathlib import Path
 
 import pytest
 

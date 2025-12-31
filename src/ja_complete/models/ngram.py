@@ -157,6 +157,36 @@ class NgramModel(CompletionModel):
         prob = (count + SMOOTHING_ALPHA) / (total + SMOOTHING_ALPHA * self.vocabulary_size)
         return prob
 
+    def _get_next_token_candidates(self, history: list[str]) -> dict[str, float]:
+        """
+        historyに基づいて次のトークン候補とその確率を取得する。
+
+        Args:
+            history: コンテキストトークンのリスト（最大2トークン）
+
+        Returns:
+            次のトークン -> 確率のマッピング
+        """
+        candidates: dict[str, float] = {}
+
+        # 2トークンのhistoryがある場合はtrigramを使用
+        if len(history) == 2:
+            trigram_key = (history[0], history[1])
+            if trigram_key in self.trigrams:
+                for next_token in self.trigrams[trigram_key]:
+                    prob = self._calculate_probability(history, next_token)
+                    candidates[next_token] = prob
+
+        # 1個以上のhistoryトークンがある場合はbigramを使用
+        if len(history) >= 1 and not candidates:
+            last_token = history[-1]
+            if last_token in self.bigrams:
+                for next_token in self.bigrams[last_token]:
+                    prob = self._calculate_probability(history, next_token)
+                    candidates[next_token] = prob
+
+        return candidates
+
     def _extend_particle_suggestions(
         self, suggestions: list[Suggestion], max_extensions: int = 3
     ) -> list[Suggestion]:
@@ -184,23 +214,7 @@ class NgramModel(CompletionModel):
                     continue
 
                 history = tokens[-2:] if len(tokens) >= 2 else tokens[-1:]
-                next_candidates: dict[str, float] = {}
-
-                # 2トークンのhistoryがある場合はtrigramを使用
-                if len(history) == 2:
-                    trigram_key = (history[0], history[1])
-                    if trigram_key in self.trigrams:
-                        for next_token in self.trigrams[trigram_key]:
-                            prob = self._calculate_probability(history, next_token)
-                            next_candidates[next_token] = prob
-
-                # 1個以上のhistoryトークンがある場合はbigramを使用
-                if len(history) >= 1 and not next_candidates:
-                    last_token = history[-1]
-                    if last_token in self.bigrams:
-                        for next_token in self.bigrams[last_token]:
-                            prob = self._calculate_probability(history, next_token)
-                            next_candidates[next_token] = prob
+                next_candidates = self._get_next_token_candidates(history)
 
                 # 上位の次のトークンを追加
                 sorted_candidates = sorted(
@@ -253,23 +267,7 @@ class NgramModel(CompletionModel):
         history = tokens[-2:] if len(tokens) >= 2 else tokens[-1:]
 
         # 候補となる次のトークンを取得
-        candidates: dict[str, float] = {}
-
-        # 2トークンのhistoryがある場合はtrigramを使用
-        if len(history) == 2:
-            trigram_key = (history[0], history[1])
-            if trigram_key in self.trigrams:
-                for next_token in self.trigrams[trigram_key]:
-                    prob = self._calculate_probability(history, next_token)
-                    candidates[next_token] = prob
-
-        # 1個以上のhistoryトークンがある場合はbigramを使用
-        if len(history) >= 1 and not candidates:
-            last_token = history[-1]
-            if last_token in self.bigrams:
-                for next_token in self.bigrams[last_token]:
-                    prob = self._calculate_probability(history, next_token)
-                    candidates[next_token] = prob
+        candidates = self._get_next_token_candidates(history)
 
         # まだ候補がない場合は全unigramを使用
         if not candidates and self.unigrams:
