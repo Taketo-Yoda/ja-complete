@@ -80,6 +80,34 @@ def get_morphemes(text: str) -> list[dict[str, str]]:
     return morphemes
 
 
+def ends_with_particle(text: str) -> bool:
+    """
+    テキストが助詞で終わるかどうかを判定する。
+
+    Args:
+        text: 判定する日本語テキスト
+
+    Returns:
+        助詞で終わる場合True、それ以外False
+
+    Example:
+        >>> ends_with_particle("今日は")
+        True
+        >>> ends_with_particle("今日")
+        False
+    """
+    if not text:
+        return False
+
+    morphemes = get_morphemes(text)
+    if not morphemes:
+        return False
+
+    # 最後の形態素が助詞かチェック
+    last_morph = morphemes[-1]
+    return last_morph["pos"] == "助詞"
+
+
 def extract_bunsetsu(text: str) -> list[str]:
     """
     ルールベースのアプローチを使用して文節（フレーズチャンク）を抽出する。

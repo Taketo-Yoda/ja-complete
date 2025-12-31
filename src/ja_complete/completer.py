@@ -61,7 +61,11 @@ class JaCompleter:
         self._phrase_model.add_phrases(phrases)
 
     def suggest_from_phrases(
-        self, input_text: str, top_k: int = 10, fallback_to_ngram: bool | None = None
+        self,
+        input_text: str,
+        top_k: int = 10,
+        fallback_to_ngram: bool | None = None,
+        extend_particles: bool = True,
     ) -> SuggestionList:
         """
         オプションのN-gramフォールバック付きでフレーズモデルから補完を取得する。
@@ -71,6 +75,8 @@ class JaCompleter:
             top_k: 候補の最大数
             fallback_to_ngram: デフォルトのフォールバック動作を上書き。
                              Noneの場合、インスタンス設定を使用。
+            extend_particles: N-gramフォールバック時に助詞で終わる候補に次の語を追加するか
+                            （デフォルト: True）
 
         Returns:
             SuggestionList: スコアの降順でソート済みの補完候補リスト
@@ -88,7 +94,7 @@ class JaCompleter:
         )
 
         if not results and use_fallback:
-            results = self._ngram_model.suggest(input_text, top_k)
+            results = self._ngram_model.suggest(input_text, top_k, extend_particles)
 
         return results
 
@@ -103,13 +109,16 @@ class JaCompleter:
         self._ngram_model = NgramModel(model_path)
 
     @validate_call
-    def suggest_from_ngram(self, input_text: str, top_k: TopK = 10) -> SuggestionList:
+    def suggest_from_ngram(
+        self, input_text: str, top_k: TopK = 10, extend_particles: bool = True
+    ) -> SuggestionList:
         """
         N-gramモデルのみから補完を取得する。
 
         Args:
             input_text: ユーザー入力テキスト
             top_k: 候補の最大数（1〜1000）
+            extend_particles: 助詞で終わる候補に次の語を追加するか（デフォルト: True）
 
         Returns:
             SuggestionList: スコアの降順でソート済みの補完候補リスト
@@ -117,7 +126,7 @@ class JaCompleter:
         Raises:
             ValidationError: top_kが1〜1000の範囲外の場合
         """
-        return self._ngram_model.suggest(input_text, top_k)
+        return self._ngram_model.suggest(input_text, top_k, extend_particles)
 
     # 単純辞書メソッド
     def add_simple_suggestions(self, suggestions: dict[str, list[str]]) -> None:
@@ -137,7 +146,11 @@ class JaCompleter:
         self._simple_model.add_suggestions(suggestions)
 
     def suggest_from_simple(
-        self, input_text: str, top_k: int = 10, fallback_to_ngram: bool | None = None
+        self,
+        input_text: str,
+        top_k: int = 10,
+        fallback_to_ngram: bool | None = None,
+        extend_particles: bool = True,
     ) -> SuggestionList:
         """
         オプションのN-gramフォールバック付きで単純辞書から補完を取得する。
@@ -147,6 +160,8 @@ class JaCompleter:
             top_k: 候補の最大数
             fallback_to_ngram: デフォルトのフォールバック動作を上書き。
                              Noneの場合、インスタンス設定を使用。
+            extend_particles: N-gramフォールバック時に助詞で終わる候補に次の語を追加するか
+                            （デフォルト: True）
 
         Returns:
             SuggestionList: スコアの降順でソート済みの補完候補リスト
@@ -164,7 +179,7 @@ class JaCompleter:
         )
 
         if not results and use_fallback:
-            results = self._ngram_model.suggest(input_text, top_k)
+            results = self._ngram_model.suggest(input_text, top_k, extend_particles)
 
         return results
 

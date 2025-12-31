@@ -42,7 +42,7 @@ class NgramModel(CompletionModel):
         self.trigrams: dict[tuple[str, str], dict[str, int]] = {}
         self.vocabulary_size: int = 0
 
-        # Check environment variable for test mode
+        # テストモード用の環境変数をチェック
         skip_default = skip_default or os.getenv("SKIP_DEFAULT_MODEL") == "1"
 
         if model_path:
@@ -69,7 +69,7 @@ class NgramModel(CompletionModel):
         if not model_file.exists():
             raise FileNotFoundError(f"Model file not found: {path}")
 
-        # Warn about pickle security risk when loading non-default models
+        # デフォルトモデル以外を読み込む場合、pickleのセキュリティリスクを警告
         default_model = Path(__file__).parent.parent / "data" / "default_ngram.pkl"
         if model_file.resolve() != default_model.resolve():
             warnings.warn(
@@ -83,11 +83,11 @@ class NgramModel(CompletionModel):
         with open(model_file, "rb") as f:
             model = pickle.load(f)
 
-        # Validate model structure
+        # モデル構造を検証
         if not isinstance(model, dict):
             raise ValueError(f"Invalid model format: expected dict, got {type(model)}")
 
-        # Warn if model is missing expected keys (but still allow loading)
+        # モデルに期待されるキーが欠けている場合は警告（ただし読み込みは許可）
         expected_keys = {"unigrams", "bigrams", "trigrams"}
         missing_keys = expected_keys - set(model.keys())
         if missing_keys:
@@ -157,8 +157,67 @@ class NgramModel(CompletionModel):
         prob = (count + SMOOTHING_ALPHA) / (total + SMOOTHING_ALPHA * self.vocabulary_size)
         return prob
 
+    def _extend_particle_suggestions(
+        self, suggestions: list[Suggestion], max_extensions: int = 3
+    ) -> list[Suggestion]:
+        """
+        助詞で終わる補完候補に次の語を追加する。
+
+        Args:
+            suggestions: 拡張する補完候補のリスト
+            max_extensions: 各候補に追加する次の語の最大数
+
+        Returns:
+            拡張された補完候補のリスト（元の候補も含む）
+        """
+        extended: list[Suggestion] = []
+
+        for suggestion in suggestions:
+            # 元の候補を追加
+            extended.append(suggestion)
+
+            # 助詞で終わるかチェック
+            if tokenizer.ends_with_particle(suggestion.text):
+                # 次のトークンを予測
+                tokens = tokenizer.tokenize(suggestion.text)
+                if not tokens:
+                    continue
+
+                history = tokens[-2:] if len(tokens) >= 2 else tokens[-1:]
+                next_candidates: dict[str, float] = {}
+
+                # 2トークンのhistoryがある場合はtrigramを使用
+                if len(history) == 2:
+                    trigram_key = (history[0], history[1])
+                    if trigram_key in self.trigrams:
+                        for next_token in self.trigrams[trigram_key]:
+                            prob = self._calculate_probability(history, next_token)
+                            next_candidates[next_token] = prob
+
+                # 1個以上のhistoryトークンがある場合はbigramを使用
+                if len(history) >= 1 and not next_candidates:
+                    last_token = history[-1]
+                    if last_token in self.bigrams:
+                        for next_token in self.bigrams[last_token]:
+                            prob = self._calculate_probability(history, next_token)
+                            next_candidates[next_token] = prob
+
+                # 上位の次のトークンを追加
+                sorted_candidates = sorted(
+                    next_candidates.items(), key=lambda x: x[1], reverse=True
+                )
+                for next_token, prob in sorted_candidates[:max_extensions]:
+                    extended_text = suggestion.text + next_token
+                    # 元のスコアと次のトークンのスコアを掛け合わせる
+                    combined_score = suggestion.score * prob
+                    extended.append(Suggestion(text=extended_text, score=combined_score))
+
+        return extended
+
     @validate_call
-    def suggest(self, input_text: str, top_k: TopK = 10) -> SuggestionList:
+    def suggest(
+        self, input_text: str, top_k: TopK = 10, extend_particles: bool = True
+    ) -> SuggestionList:
         """
         N-gram確率を使用して次の単語を予測する。
 
@@ -167,11 +226,13 @@ class NgramModel(CompletionModel):
         2. 最後の1-2トークンをコンテキストとして取得
         3. 可能性のある全ての次のトークンの確率を計算
         4. 可能性の高い次のトークンを追加して補完を生成
-        5. 確率でソートされたtop_k個の結果を返す
+        5. extend_particles=Trueの場合、助詞で終わる候補に次の語を追加
+        6. 確率でソートされたtop_k個の結果を返す
 
         Args:
             input_text: ユーザー入力テキスト
             top_k: 候補の最大数（1〜1000）
+            extend_particles: 助詞で終わる候補に次の語を追加するか（デフォルト: True）
 
         Returns:
             SuggestionList: スコアの降順でソート済みの補完候補リスト
@@ -221,6 +282,10 @@ class NgramModel(CompletionModel):
         for next_token, prob in candidates.items():
             completion_text = input_text + next_token
             suggestions.append(Suggestion(text=completion_text, score=prob))
+
+        # 助詞で終わる候補を拡張
+        if extend_particles:
+            suggestions = self._extend_particle_suggestions(suggestions)
 
         # SuggestionListでラップ（自動的にソートされる）してtop_kを返す
         suggestion_list = SuggestionList(items=suggestions)
