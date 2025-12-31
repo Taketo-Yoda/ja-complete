@@ -331,6 +331,25 @@ class NgramModel(CompletionModel):
         if extend_particles:
             suggestions = self._extend_particle_suggestions(suggestions)
 
+        # 末尾のスペース（全角・半角）を除去し、重複を排除
+        dedup_map: dict[str, float] = {}
+        for suggestion in suggestions:
+            # 末尾のスペース（全角U+3000・半角U+0020）を除去
+            stripped_text = suggestion.text.rstrip(" 　")
+
+            # 入力値と一致する場合はスキップ（補完として意味がない）
+            if stripped_text == input_text:
+                continue
+
+            # 重複する場合は高い方のスコアを採用
+            if stripped_text in dedup_map:
+                dedup_map[stripped_text] = max(dedup_map[stripped_text], suggestion.score)
+            else:
+                dedup_map[stripped_text] = suggestion.score
+
+        # Suggestionリストに変換
+        suggestions = [Suggestion(text=text, score=score) for text, score in dedup_map.items()]
+
         # SuggestionListでラップ（自動的にソートされる）してtop_kを返す
         suggestion_list = SuggestionList(items=suggestions)
         return SuggestionList(items=suggestion_list.top_k(top_k))

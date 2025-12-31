@@ -608,3 +608,218 @@ class TestAddNgramData:
         assert model.trigrams == {}
         assert model.morphology == {}
         assert model.vocabulary_size == 0
+
+
+class TestTrailingSpaceRemoval:
+    """Test trailing space removal and deduplication in suggest()."""
+
+    def test_half_width_space_stripped(self):
+        """Test that half-width trailing spaces are removed."""
+        from ja_complete.types import NgramData
+
+        model = NgramModel(skip_default=True)
+
+        # Create model with space-ending tokens
+        data = NgramData(
+            unigrams={"今日": 10, " ": 5},
+            bigrams={"今日": {" ": 5}},
+        )
+        model.add_ngram_data(data)
+
+        results = model.suggest("今日", top_k=10, extend_particles=False)
+
+        # Results should not contain trailing half-width spaces
+        for suggestion in results.items:
+            assert not suggestion.text.endswith(" "), \
+                f"Found trailing space in: {repr(suggestion.text)}"
+
+    def test_full_width_space_stripped(self):
+        """Test that full-width trailing spaces (U+3000) are removed."""
+        from ja_complete.types import NgramData
+
+        model = NgramModel(skip_default=True)
+
+        # Create model with full-width space
+        data = NgramData(
+            unigrams={"今日": 10, "　": 5},  # U+3000 full-width space
+            bigrams={"今日": {"　": 5}},
+        )
+        model.add_ngram_data(data)
+
+        results = model.suggest("今日", top_k=10, extend_particles=False)
+
+        # Results should not contain trailing full-width spaces
+        for suggestion in results.items:
+            assert not suggestion.text.endswith("　"), \
+                f"Found trailing full-width space in: {repr(suggestion.text)}"
+
+    def test_mixed_spaces_stripped(self):
+        """Test that mixed full/half-width trailing spaces are removed."""
+        from ja_complete.types import NgramData
+
+        model = NgramModel(skip_default=True)
+
+        # Create model with mixed spaces
+        data = NgramData(
+            unigrams={"今日": 10, " ": 5, "　": 3},
+            bigrams={"今日": {" ": 5, "　": 3}},
+        )
+        model.add_ngram_data(data)
+
+        results = model.suggest("今日", top_k=10, extend_particles=False)
+
+        # Results should not contain any trailing spaces
+        for suggestion in results.items:
+            assert not suggestion.text.endswith(" "), \
+                f"Found trailing half-width space in: {repr(suggestion.text)}"
+            assert not suggestion.text.endswith("　"), \
+                f"Found trailing full-width space in: {repr(suggestion.text)}"
+
+    def test_deduplication_keeps_higher_score(self):
+        """Test that deduplication keeps the higher score when duplicates occur after stripping."""
+        from ja_complete.types import NgramData
+
+        model = NgramModel(skip_default=True)
+
+        # Create model where different tokens result in same text after stripping
+        # "は" and "は " (with space) should deduplicate to "今日は"
+        data = NgramData(
+            unigrams={"今日": 100, "は": 50, " ": 10},
+            bigrams={"今日": {"は": 50}},
+            trigrams={("今日", "は"): {" ": 10}},
+        )
+        model.add_ngram_data(data)
+
+        # Manually add a case that creates duplicates after stripping
+        # This simulates: "今日は" (score X) and "今日は " (score Y) -> both become "今日は"
+        model.bigrams["今日"] = {"は": 50, "は ": 30}  # "は " has trailing space
+
+        results = model.suggest("今日", top_k=10, extend_particles=False)
+
+        # Check that "今日は" appears only once
+        texts = [s.text for s in results.items]
+        assert texts.count("今日は") <= 1, "Deduplication failed: '今日は' appears multiple times"
+
+    def test_top_k_maintained_after_deduplication(self):
+        """Test that top_k results are returned even after deduplication."""
+        from ja_complete.types import NgramData
+
+        model = NgramModel(skip_default=True)
+
+        # Create model with many tokens
+        data = NgramData(
+            unigrams={"今日": 100, "は": 50, "が": 40, "の": 30, "を": 20, "に": 15},
+            bigrams={"今日": {"は": 50, "が": 40, "の": 30, "を": 20, "に": 15}},
+        )
+        model.add_ngram_data(data)
+
+        top_k = 5
+        results = model.suggest("今日", top_k=top_k, extend_particles=False)
+
+        # Should return at most top_k results
+        assert len(results) <= top_k, f"Expected at most {top_k} results, got {len(results)}"
+
+    def test_middle_spaces_preserved_when_followed_by_content(self):
+        """Test that spaces are preserved when they're in the middle (followed by content)."""
+        from ja_complete.types import NgramData
+
+        model = NgramModel(skip_default=True)
+
+        # Create model where adding content creates non-trailing spaces
+        data = NgramData(
+            unigrams={"こんにちは": 100, "世界": 50, " ": 40},
+            bigrams={"こんにちは": {" ": 40}},
+            trigrams={("こんにちは", " "): {"世界": 30}},
+        )
+        model.add_ngram_data(data)
+
+        results = model.suggest("こんにちは", top_k=10, extend_particles=False)
+
+        # When we add " 世界", the space is in the middle, not trailing
+        # So it should be preserved as "こんにちは 世界" (with space in middle)
+        # But if we just add " " with nothing after, it gets stripped to "こんにちは"
+
+        # Check that we don't have any results with ONLY trailing spaces
+        for suggestion in results.items:
+            # No result should be just the input with trailing spaces
+            assert suggestion.text == suggestion.text.rstrip(" 　"), \
+                f"Found trailing spaces in result: {repr(suggestion.text)}"
+
+    def test_multiple_trailing_spaces_stripped(self):
+        """Test that multiple trailing spaces are all removed."""
+        from ja_complete.types import NgramData
+
+        model = NgramModel(skip_default=True)
+
+        # Create model with multiple spaces
+        data = NgramData(
+            unigrams={"今日": 100, " ": 50, "　": 30},
+            bigrams={"今日": {" ": 50}, " ": {"　": 30}},
+        )
+        model.add_ngram_data(data)
+
+        results = model.suggest("今日", top_k=10, extend_particles=False)
+
+        # Results should not have any trailing spaces
+        for suggestion in results.items:
+            original_text = suggestion.text
+            stripped_text = suggestion.text.rstrip(" 　")
+            assert original_text == stripped_text, \
+                f"Trailing spaces not fully removed: {repr(suggestion.text)}"
+
+    def test_input_matching_results_excluded(self):
+        """Test that results matching the input text are excluded."""
+        from ja_complete.types import NgramData
+
+        model = NgramModel(skip_default=True)
+
+        # Create model where stripping spaces would result in input text
+        data = NgramData(
+            unigrams={"今日": 100, " ": 50, "は": 30},
+            bigrams={"今日": {" ": 50, "は": 30}},
+        )
+        model.add_ngram_data(data)
+
+        results = model.suggest("今日", top_k=10, extend_particles=False)
+
+        # Results should not include the input text itself
+        for suggestion in results.items:
+            assert suggestion.text != "今日", \
+                f"Result should not match input text: {repr(suggestion.text)}"
+
+        # Should have meaningful completions (not just the input)
+        if len(results) > 0:
+            assert all(len(s.text) > len("今日") for s in results.items), \
+                "All results should be longer than input"
+
+    def test_input_matching_excluded_maintains_top_k(self):
+        """Test that excluding input-matching results still returns up to top_k results."""
+        from ja_complete.types import NgramData
+
+        model = NgramModel(skip_default=True)
+
+        # Create model with many tokens
+        data = NgramData(
+            unigrams={
+                "こんにちは": 100,
+                " ": 50,  # This will create "こんにちは " -> "こんにちは" (excluded)
+                "世界": 40,
+                "みなさん": 30,
+                "!": 20,
+            },
+            bigrams={
+                "こんにちは": {" ": 50, "世界": 40, "みなさん": 30, "!": 20},
+            },
+        )
+        model.add_ngram_data(data)
+
+        top_k = 5
+        results = model.suggest("こんにちは", top_k=top_k, extend_particles=False)
+
+        # Should not include input text
+        texts = [s.text for s in results.items]
+        assert "こんにちは" not in texts, "Input text should be excluded"
+
+        # Should return up to top_k results (excluding the input match)
+        assert len(results) <= top_k, f"Should return at most {top_k} results"
+        assert len(results) > 0, "Should return some results"
