@@ -4,7 +4,6 @@
 統一されたインターフェースを提供するためにFacadeパターンを実装する。
 """
 
-import json
 from pathlib import Path
 
 from pydantic import validate_call
@@ -13,7 +12,7 @@ from ja_complete import tokenizer
 from ja_complete.models.ngram import NgramModel
 from ja_complete.models.phrase import PhraseModel
 from ja_complete.models.simple import SimpleDictModel
-from ja_complete.types import SuggestionList, TopK
+from ja_complete.types import MorphToken, NgramData, SimpleSuggestions, SuggestionList, TopK
 
 
 class JaCompleter:
@@ -142,19 +141,24 @@ class JaCompleter:
         return self._ngram_model.suggest(input_text, top_k, extend_particles)
 
     # 単純辞書メソッド
-    def add_simple_suggestions(self, suggestions: dict[str, list[str]]) -> None:
-        """
-        単純なプレフィックスから補完へのマッピングを追加する。
+    def add_simple_suggestions(self, suggestions: dict[str, list[str]] | SimpleSuggestions) -> None:
+        """単純なプレフィックスから補完へのマッピングを追加する。
 
         Args:
-            suggestions: プレフィックス -> 補完リストのマッピング辞書
+            suggestions: プレフィックス -> 補完リストのマッピング辞書、
+                        またはSimpleSuggestions値オブジェクト
 
         Example:
             >>> completer = JaCompleter()
+            >>> # dict形式
             >>> completer.add_simple_suggestions({
             ...     "お": ["おはよう", "おやすみ", "お疲れ様"],
             ...     "あり": ["ありがとう", "ありがとうございます"]
             ... })
+            >>> # SimpleSuggestions形式
+            >>> phrases = ["今日はいい天気", "今日は雨"]
+            >>> simple_sugg = JaCompleter.phrases_to_simple_suggestions(phrases)
+            >>> completer.add_simple_suggestions(simple_sugg)
         """
         self._simple_model.add_suggestions(suggestions)
 
@@ -198,34 +202,110 @@ class JaCompleter:
 
     # ユーティリティメソッド
     @staticmethod
-    def convert_to_jsonl(phrases: list[str]) -> str:
-        """
-        フレーズのリストをN-gramモデルトレーニング用のJSONL形式に変換する。
+    def phrases_to_simple_suggestions(
+        phrases: list[str],
+        min_prefix_length: int = 1,
+        max_prefix_length: int = 10,
+    ) -> SimpleSuggestions:
+        """フレーズから文字ベースのプレフィックスマッピングを生成する。
 
-        各フレーズはメタデータを持つJSONオブジェクトとなり、
-        カスタムN-gramモデルの構築やトレーニングデータに使用できる。
+        各フレーズから1文字〜max_prefix_length文字までのプレフィックスを
+        抽出し、SimpleSuggestions形式に変換する。
+
+        Args:
+            phrases: 日本語フレーズのリスト
+            min_prefix_length: 最小プレフィックス長（デフォルト: 1）
+            max_prefix_length: 最大プレフィックス長（デフォルト: 10）
+
+        Returns:
+            SimpleSuggestions: プレフィックス -> フレーズリストのマッピング
+
+        Example:
+            >>> phrases = ["今日はいい天気", "今日は雨"]
+            >>> suggestions = JaCompleter.phrases_to_simple_suggestions(phrases)
+            >>> "今" in suggestions.data
+            True
+            >>> "今日" in suggestions.data
+            True
+            >>> len(suggestions.data["今"])
+            2
+        """
+        prefix_map: dict[str, set[str]] = {}
+
+        for phrase in phrases:
+            for i in range(min_prefix_length, min(max_prefix_length + 1, len(phrase) + 1)):
+                prefix = phrase[:i]
+                if prefix not in prefix_map:
+                    prefix_map[prefix] = set()
+                prefix_map[prefix].add(phrase)
+
+        # setをlistに変換してソート
+        data = {k: sorted(list(v)) for k, v in prefix_map.items()}
+        return SimpleSuggestions(data=data)
+
+    @staticmethod
+    def phrases_to_ngram_data(phrases: list[str]) -> NgramData:
+        """フレーズをN-gramデータに変換する（形態素情報含む）。
+
+        各フレーズを形態素解析し、unigram/bigram/trigramのカウントと
+        形態素情報を抽出する。
 
         Args:
             phrases: 日本語フレーズのリスト
 
         Returns:
-            JSONL文字列（1行に1つのJSONオブジェクト）
+            NgramData: N-gramカウントと形態素情報を含むデータ
 
         Example:
-            >>> phrases = ["今日はいい天気", "明日は雨"]
-            >>> jsonl = JaCompleter.convert_to_jsonl(phrases)
-            >>> print(jsonl)
-            {"text": "今日はいい天気", "tokens": ["今日", "は", "いい", "天気"]}
-            {"text": "明日は雨", "tokens": ["明日", "は", "雨"]}
-
-        Note:
-            JSONL出力には、より簡単なN-gramモデルトレーニングのために
-            フレーズのトークン化バージョンが含まれる。
+            >>> phrases = ["今日はいい天気", "今日は雨"]
+            >>> ngram_data = JaCompleter.phrases_to_ngram_data(phrases)
+            >>> "今日" in ngram_data.unigrams
+            True
+            >>> "は" in ngram_data.unigrams
+            True
+            >>> "今日" in ngram_data.morphology
+            True
         """
-        lines: list[str] = []
-        for phrase in phrases:
-            tokens = tokenizer.tokenize(phrase)
-            obj = {"text": phrase, "tokens": tokens}
-            lines.append(json.dumps(obj, ensure_ascii=False))
+        from collections import defaultdict
 
-        return "\n".join(lines)
+        unigrams: dict[str, int] = {}
+        bigrams: defaultdict[str, defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
+        trigrams: defaultdict[tuple[str, str], defaultdict[str, int]] = defaultdict(
+            lambda: defaultdict(int)
+        )
+        morphology: dict[str, MorphToken] = {}
+
+        for phrase in phrases:
+            morphemes = tokenizer.get_morphemes(phrase)
+            tokens = [m["surface"] for m in morphemes]
+
+            # unigramカウント
+            for token in tokens:
+                unigrams[token] = unigrams.get(token, 0) + 1
+
+            # bigramカウント
+            for i in range(len(tokens) - 1):
+                bigrams[tokens[i]][tokens[i + 1]] += 1
+
+            # trigramカウント
+            for i in range(len(tokens) - 2):
+                key = (tokens[i], tokens[i + 1])
+                trigrams[key][tokens[i + 2]] += 1
+
+            # 形態素情報保存（重複時は最初の出現を保持）
+            for morph in morphemes:
+                surface = morph["surface"]
+                if surface not in morphology:
+                    morphology[surface] = MorphToken(
+                        surface=surface,
+                        pos=morph["pos"],
+                        base_form=morph["base_form"],
+                    )
+
+        # defaultdictを通常のdictに変換
+        return NgramData(
+            unigrams=unigrams,
+            bigrams={k: dict(v) for k, v in bigrams.items()},
+            trigrams={(k1, k2): dict(v) for (k1, k2), v in trigrams.items()},
+            morphology=morphology,
+        )

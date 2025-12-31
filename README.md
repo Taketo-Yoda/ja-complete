@@ -90,28 +90,52 @@ results = completer.suggest_from_simple("未登録", fallback_to_ngram=False)
 print(results)  # [] (マッチがない場合は空)
 ```
 
-### フレーズをJSONLに変換
+### フレーズから補完データを生成
+
+#### 文字ベースのプレフィックス生成
 
 ```python
 from ja_complete import JaCompleter
 
-# N-gramモデルトレーニング用にフレーズをJSONL形式に変換
+# フレーズから文字ベースのプレフィックスマッピングを生成
+phrases = ["今日はいい天気", "今日は雨", "明日は晴れ"]
+suggestions = JaCompleter.phrases_to_simple_suggestions(phrases)
+
+# SimpleSuggestions型で返される
+print(suggestions.data["今"])
+# ['今日はいい天気', '今日は雨']
+
+# 補完器に直接追加可能
+completer = JaCompleter()
+completer.add_simple_suggestions(suggestions)
+results = completer.suggest_from_simple("今", fallback_to_ngram=False)
+print(results)  # 2件の候補が返される
+```
+
+#### N-gramデータの抽出とモデルへの追加
+
+```python
+from ja_complete import JaCompleter
+
+# フレーズからN-gramデータを抽出（形態素情報含む）
 phrases = [
     "今日はいい天気ですね",
     "明日は雨が降りそうです",
     "週末は晴れるといいな",
 ]
+ngram_data = JaCompleter.phrases_to_ngram_data(phrases)
 
-jsonl = JaCompleter.convert_to_jsonl(phrases)
-print(jsonl)
-# 出力:
-# {"text": "今日はいい天気ですね", "tokens": ["今日", "は", "いい", "天気", "です", "ね"]}
-# {"text": "明日は雨が降りそうです", "tokens": ["明日", "は", "雨", "が", "降り", "そう", "です"]}
-# {"text": "週末は晴れるといいな", "tokens": ["週末", "は", "晴れる", "と", "いい", "な"]}
+# NgramData型で返される
+print(ngram_data.unigrams["今日"])  # カウント数
+print(ngram_data.morphology["今日"].pos)  # 品詞情報
 
-# モデルトレーニング用にファイルに保存
-with open("phrases.jsonl", "w", encoding="utf-8") as f:
-    f.write(jsonl)
+# デフォルトモデルに追加してカスタマイズ
+completer = JaCompleter()
+completer._ngram_model.add_ngram_data(ngram_data)
+
+# カスタマイズしたモデルで補完
+results = completer.suggest_from_ngram("今日は", top_k=5)
+print(results)
 ```
 
 ## CLI使用方法
@@ -164,20 +188,60 @@ ja-complete simple "あり" --dict suggestions.json
 
 **単純辞書補完:**
 
-- `add_simple_suggestions(suggestions: Dict[str, List[str]]) -> None`
+- `add_simple_suggestions(suggestions: Dict[str, List[str]] | SimpleSuggestions) -> None`
   - プレフィックスから候補へのマッピングを追加
+  - 辞書形式またはSimpleSuggestions値オブジェクトを受け入れ
 
 - `suggest_from_simple(input_text: str, top_k: int = 10, fallback_to_ngram: bool | None = None, extend_particles: bool = True) -> List[Dict[str, Any]]`
   - 単純辞書から補完を取得
   - マッチがなく`fallback_to_ngram=True`（またはインスタンスデフォルト）の場合、N-gram補完を返す
   - 直接プレフィックスマッチング
 
-**ユーティリティメソッド:**
+**データ変換メソッド:**
 
-- `convert_to_jsonl(phrases: List[str]) -> str` (静的メソッド)
-  - フレーズのリストをJSONL形式に変換
-  - 各行には`{"text": "phrase", "tokens": ["token1", "token2", ...]}`が含まれる
-  - N-gramモデル用のトレーニングデータ準備に便利
+- `phrases_to_simple_suggestions(phrases: List[str], min_prefix_length: int = 1, max_prefix_length: int = 10) -> SimpleSuggestions` (静的メソッド)
+  - フレーズから文字ベースのプレフィックスマッピングを生成
+  - 各フレーズから1文字〜max_prefix_length文字までのプレフィックスを抽出
+  - SimpleSuggestions値オブジェクトを返す
+
+- `phrases_to_ngram_data(phrases: List[str]) -> NgramData` (静的メソッド)
+  - フレーズをN-gramデータに変換（形態素情報含む）
+  - unigram/bigram/trigramのカウントと形態素情報を抽出
+  - NgramData値オブジェクトを返す
+
+### 値オブジェクト型
+
+**SimpleSuggestions**
+- プレフィックス -> 補完候補リストのマッピングを保持する値クラス
+- `data: Dict[str, List[str]]` - プレフィックスから候補へのマッピング
+- `to_dict() -> Dict[str, List[str]]` - 通常の辞書に変換
+- イミュータブル（frozen）
+- バリデーション付き（空文字列キー禁止、空リスト禁止）
+
+**MorphToken**
+- 形態素トークン情報を保持する値クラス
+- `surface: str` - 表層形
+- `pos: str` - 品詞
+- `base_form: str` - 基本形
+- イミュータブル（frozen）
+
+**NgramData**
+- N-gramカウントと形態素情報を保持する値クラス
+- `unigrams: Dict[str, int]` - unigramカウント
+- `bigrams: Dict[str, Dict[str, int]]` - bigramカウント
+- `trigrams: Dict[Tuple[str, str], Dict[str, int]]` - trigramカウント
+- `morphology: Dict[str, MorphToken]` - 形態素情報
+- バリデーション付き（正の整数カウントのみ）
+
+### NgramModel
+
+**メソッド:**
+
+- `add_ngram_data(data: NgramData) -> None`
+  - N-gramデータをモデルにマージ（破壊的更新）
+  - 既存のカウントに新しいカウントを加算
+  - 形態素情報を追加（既存のトークンは上書きしない）
+  - vocabulary_sizeを自動更新
 
 ## スコアリングの仕組み
 

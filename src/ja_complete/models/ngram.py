@@ -13,7 +13,7 @@ from pydantic import validate_call
 
 from ja_complete import tokenizer
 from ja_complete.models.base import CompletionModel
-from ja_complete.types import Suggestion, SuggestionList, TopK
+from ja_complete.types import MorphToken, NgramData, Suggestion, SuggestionList, TopK
 
 # Laplaceスムージングパラメータ
 SMOOTHING_ALPHA = 1.0
@@ -40,6 +40,7 @@ class NgramModel(CompletionModel):
         self.unigrams: dict[str, int] = {}
         self.bigrams: dict[str, dict[str, int]] = {}
         self.trigrams: dict[tuple[str, str], dict[str, int]] = {}
+        self.morphology: dict[str, MorphToken] = {}
         self.vocabulary_size: int = 0
 
         # テストモード用の環境変数をチェック
@@ -101,6 +102,7 @@ class NgramModel(CompletionModel):
         self.unigrams = model.get("unigrams", {})
         self.bigrams = model.get("bigrams", {})
         self.trigrams = model.get("trigrams", {})
+        self.morphology = model.get("morphology", {})  # 後方互換性: オプショナル
         self.vocabulary_size = len(self.unigrams)
 
     def load_default_model(self) -> None:
@@ -111,6 +113,50 @@ class NgramModel(CompletionModel):
         else:
             # デフォルトモデルが利用できない場合 - 空のモデルを使用
             self.vocabulary_size = 0
+
+    def add_ngram_data(self, data: NgramData) -> None:
+        """N-gramデータをモデルにマージする（破壊的更新）。
+
+        既存のカウントに新しいカウントを加算し、形態素情報を追加する。
+
+        Args:
+            data: マージするN-gramデータ
+
+        Example:
+            >>> model = NgramModel(skip_default=True)
+            >>> from ja_complete import JaCompleter
+            >>> phrases = ["今日はいい天気"]
+            >>> ngram_data = JaCompleter.phrases_to_ngram_data(phrases)
+            >>> model.add_ngram_data(ngram_data)
+            >>> "今日" in model.unigrams
+            True
+        """
+        # unigramマージ
+        for token, count in data.unigrams.items():
+            self.unigrams[token] = self.unigrams.get(token, 0) + count
+
+        # bigramマージ
+        for token1, next_tokens in data.bigrams.items():
+            if token1 not in self.bigrams:
+                self.bigrams[token1] = {}
+            for token2, count in next_tokens.items():
+                self.bigrams[token1][token2] = self.bigrams[token1].get(token2, 0) + count
+
+        # trigramマージ
+        for (token1, token2), next_tokens in data.trigrams.items():
+            key = (token1, token2)
+            if key not in self.trigrams:
+                self.trigrams[key] = {}
+            for token3, count in next_tokens.items():
+                self.trigrams[key][token3] = self.trigrams[key].get(token3, 0) + count
+
+        # 形態素情報マージ（既存のトークンには新しい情報で上書きしない）
+        for surface, morph_token in data.morphology.items():
+            if surface not in self.morphology:
+                self.morphology[surface] = morph_token
+
+        # vocabulary_size更新
+        self.vocabulary_size = len(self.unigrams)
 
     def _calculate_probability(self, history: list[str], next_token: str) -> float:
         """

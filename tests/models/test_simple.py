@@ -469,3 +469,68 @@ class TestSimpleDictModelDocExamples:
         results = model.suggest("あり", top_k=10)
         assert len(results) == 2
         assert all(r.text in ["ありがとう", "ありがとうございます"] for r in results.items)
+
+
+class TestSimpleSuggestionsTypeSupport:
+    """Test add_suggestions() accepts SimpleSuggestions type."""
+
+    def test_add_suggestions_with_dict(self):
+        """Test add_suggestions with dict type (backward compatibility)."""
+        model = SimpleDictModel()
+
+        # Should accept dict
+        model.add_suggestions({"お": ["おはよう", "おやすみ"]})
+
+        results = model.suggest("お", top_k=10)
+        assert len(results) == 2
+
+    def test_add_suggestions_with_simple_suggestions_type(self):
+        """Test add_suggestions with SimpleSuggestions type."""
+        from ja_complete.types import SimpleSuggestions
+
+        model = SimpleDictModel()
+
+        # Create SimpleSuggestions
+        simple_sugg = SimpleSuggestions(data={"お": ["おはよう", "おやすみ"]})
+
+        # Should accept SimpleSuggestions type
+        model.add_suggestions(simple_sugg)
+
+        results = model.suggest("お", top_k=10)
+        assert len(results) == 2
+        assert all(r.text in ["おはよう", "おやすみ"] for r in results.items)
+
+    def test_add_suggestions_mixed_usage(self):
+        """Test adding both dict and SimpleSuggestions sequentially."""
+        from ja_complete.types import SimpleSuggestions
+
+        model = SimpleDictModel()
+
+        # Add with dict
+        model.add_suggestions({"お": ["おはよう"]})
+
+        # Add with SimpleSuggestions
+        simple_sugg = SimpleSuggestions(data={"あり": ["ありがとう"]})
+        model.add_suggestions(simple_sugg)
+
+        # Both should be available
+        results_o = model.suggest("お", top_k=10)
+        assert len(results_o) == 1
+
+        results_ari = model.suggest("あり", top_k=10)
+        assert len(results_ari) == 1
+
+    def test_simple_suggestions_to_dict_conversion(self):
+        """Test that SimpleSuggestions.to_dict() is used internally."""
+        from ja_complete.types import SimpleSuggestions
+
+        model = SimpleDictModel()
+
+        data = {"こ": ["こんにちは", "こんばんは"]}
+        simple_sugg = SimpleSuggestions(data=data)
+
+        model.add_suggestions(simple_sugg)
+
+        # Verify internal dict was updated correctly
+        assert "こ" in model.suggestions
+        assert model.suggestions["こ"] == ["こんにちは", "こんばんは"]

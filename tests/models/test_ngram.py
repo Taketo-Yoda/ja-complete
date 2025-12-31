@@ -465,3 +465,146 @@ class TestLoadDefaultModel:
         assert isinstance(model.unigrams, dict)
         assert isinstance(model.bigrams, dict)
         assert isinstance(model.trigrams, dict)
+
+
+class TestAddNgramData:
+    """Test add_ngram_data() method."""
+
+    def test_add_ngram_data_to_empty_model(self):
+        """Test adding n-gram data to empty model."""
+        from ja_complete import JaCompleter
+        from ja_complete.types import MorphToken
+
+        model = NgramModel(skip_default=True)
+        phrases = ["今日はいい天気"]
+        ngram_data = JaCompleter.phrases_to_ngram_data(phrases)
+
+        model.add_ngram_data(ngram_data)
+
+        # Verify unigrams were added
+        assert "今日" in model.unigrams
+        assert model.unigrams["今日"] > 0
+
+        # Verify bigrams were added
+        assert len(model.bigrams) > 0
+
+        # Verify morphology was added
+        assert "今日" in model.morphology
+        assert isinstance(model.morphology["今日"], MorphToken)
+
+        # Verify vocabulary_size was updated
+        assert model.vocabulary_size == len(model.unigrams)
+
+    def test_add_ngram_data_merges_counts(self):
+        """Test that add_ngram_data merges counts correctly."""
+        from ja_complete import JaCompleter
+
+        model = NgramModel(skip_default=True)
+
+        # Add first phrase
+        phrases1 = ["今日はいい天気"]
+        ngram_data1 = JaCompleter.phrases_to_ngram_data(phrases1)
+        model.add_ngram_data(ngram_data1)
+
+        initial_count = model.unigrams.get("今日", 0)
+
+        # Add second phrase with same token
+        phrases2 = ["今日は雨"]
+        ngram_data2 = JaCompleter.phrases_to_ngram_data(phrases2)
+        model.add_ngram_data(ngram_data2)
+
+        # Count should have increased
+        assert model.unigrams["今日"] == initial_count + 1
+
+    def test_add_ngram_data_preserves_existing_morphology(self):
+        """Test that add_ngram_data doesn't overwrite existing morphology."""
+        from ja_complete.types import MorphToken, NgramData
+
+        model = NgramModel(skip_default=True)
+
+        # Add initial morphology
+        morph1 = MorphToken(surface="今日", pos="名詞", base_form="今日")
+        data1 = NgramData(
+            unigrams={"今日": 1},
+            morphology={"今日": morph1},
+        )
+        model.add_ngram_data(data1)
+
+        # Try to add different morphology for same token
+        morph2 = MorphToken(surface="今日", pos="副詞", base_form="今日")  # Different POS
+        data2 = NgramData(
+            unigrams={"今日": 1},
+            morphology={"今日": morph2},
+        )
+        model.add_ngram_data(data2)
+
+        # Should keep original morphology
+        assert model.morphology["今日"].pos == "名詞"
+
+    def test_add_ngram_data_complex_structure(self):
+        """Test add_ngram_data with complex bigram and trigram structure."""
+        from ja_complete.types import MorphToken, NgramData
+
+        model = NgramModel(skip_default=True)
+
+        morph1 = MorphToken(surface="今日", pos="名詞", base_form="今日")
+        morph2 = MorphToken(surface="は", pos="助詞", base_form="は")
+        morph3 = MorphToken(surface="いい", pos="形容詞", base_form="良い")
+
+        data = NgramData(
+            unigrams={"今日": 5, "は": 3, "いい": 2},
+            bigrams={
+                "今日": {"は": 3},
+                "は": {"いい": 2},
+            },
+            trigrams={
+                ("今日", "は"): {"いい": 2},
+            },
+            morphology={
+                "今日": morph1,
+                "は": morph2,
+                "いい": morph3,
+            },
+        )
+
+        model.add_ngram_data(data)
+
+        # Verify all levels
+        assert model.unigrams["今日"] == 5
+        assert model.bigrams["今日"]["は"] == 3
+        assert model.trigrams[("今日", "は")]["いい"] == 2
+        assert len(model.morphology) == 3
+
+    def test_add_ngram_data_updates_vocabulary_size(self):
+        """Test that vocabulary_size is updated correctly."""
+        from ja_complete.types import NgramData
+
+        model = NgramModel(skip_default=True)
+        assert model.vocabulary_size == 0
+
+        data = NgramData(unigrams={"token1": 1, "token2": 1, "token3": 1})
+        model.add_ngram_data(data)
+
+        assert model.vocabulary_size == 3
+
+        # Add more tokens
+        data2 = NgramData(unigrams={"token4": 1, "token5": 1})
+        model.add_ngram_data(data2)
+
+        assert model.vocabulary_size == 5
+
+    def test_add_ngram_data_empty_data(self):
+        """Test adding empty NgramData doesn't break the model."""
+        from ja_complete.types import NgramData
+
+        model = NgramModel(skip_default=True)
+        empty_data = NgramData()
+
+        model.add_ngram_data(empty_data)
+
+        # Model should still be valid
+        assert model.unigrams == {}
+        assert model.bigrams == {}
+        assert model.trigrams == {}
+        assert model.morphology == {}
+        assert model.vocabulary_size == 0

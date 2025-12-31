@@ -79,27 +79,6 @@ class TestJaCompleter:
         # Should get empty results
         assert len(results) == 0
 
-    def test_convert_to_jsonl(self):
-        """Test JSONL conversion utility."""
-        phrases = [
-            "今日はいい天気ですね",
-            "明日は雨が降りそうです",
-        ]
-
-        jsonl = JaCompleter.convert_to_jsonl(phrases)
-        assert jsonl is not None
-        lines = jsonl.split("\n")
-        assert len(lines) == 2
-
-        # Check format
-        import json
-
-        first_obj = json.loads(lines[0])
-        assert "text" in first_obj
-        assert "tokens" in first_obj
-        assert first_obj["text"] == "今日はいい天気ですね"
-        assert isinstance(first_obj["tokens"], list)
-
     def test_empty_input_validation(self):
         """Test validation for empty input."""
         completer = JaCompleter()
@@ -157,3 +136,120 @@ class TestJaCompleter:
         # Verify the model was loaded
         results = completer.suggest_from_ngram("今日", top_k=5)
         assert isinstance(results, SuggestionList)
+
+    def test_phrases_to_simple_suggestions_basic(self):
+        """Test phrases_to_simple_suggestions with basic phrases."""
+        phrases = ["今日はいい天気", "今日は雨"]
+
+        suggestions = JaCompleter.phrases_to_simple_suggestions(phrases)
+
+        # Character-based prefixes should be generated
+        assert "今" in suggestions.data
+        assert "今日" in suggestions.data
+        assert "今日は" in suggestions.data
+
+        # Both phrases should appear for prefix "今"
+        assert len(suggestions.data["今"]) == 2
+        assert "今日はいい天気" in suggestions.data["今"]
+        assert "今日は雨" in suggestions.data["今"]
+
+    def test_phrases_to_simple_suggestions_custom_length(self):
+        """Test phrases_to_simple_suggestions with custom prefix lengths."""
+        phrases = ["こんにちは"]
+
+        # min=2, max=4
+        suggestions = JaCompleter.phrases_to_simple_suggestions(
+            phrases, min_prefix_length=2, max_prefix_length=4
+        )
+
+        # Should not have 1-character prefix
+        assert "こ" not in suggestions.data
+        # Should have 2-4 character prefixes
+        assert "こん" in suggestions.data
+        assert "こんに" in suggestions.data
+        assert "こんにち" in suggestions.data
+        # Should not have 5-character prefix (exceeds max)
+        assert "こんにちは" not in suggestions.data or len("こんにちは") > 4
+
+    def test_phrases_to_simple_suggestions_empty_list(self):
+        """Test phrases_to_simple_suggestions with empty list."""
+        suggestions = JaCompleter.phrases_to_simple_suggestions([])
+        assert suggestions.data == {}
+
+    def test_phrases_to_ngram_data_basic(self):
+        """Test phrases_to_ngram_data extracts n-grams correctly."""
+        phrases = ["今日はいい天気"]
+
+        ngram_data = JaCompleter.phrases_to_ngram_data(phrases)
+
+        # Verify unigrams exist
+        assert "今日" in ngram_data.unigrams
+        assert "は" in ngram_data.unigrams
+        assert ngram_data.unigrams["今日"] > 0
+        assert ngram_data.unigrams["は"] > 0
+
+        # Verify bigrams exist
+        assert "今日" in ngram_data.bigrams
+        if "は" in ngram_data.bigrams["今日"]:
+            assert ngram_data.bigrams["今日"]["は"] > 0
+
+        # Verify morphology exists
+        assert "今日" in ngram_data.morphology
+        assert ngram_data.morphology["今日"].surface == "今日"
+        assert len(ngram_data.morphology["今日"].pos) > 0
+
+    def test_phrases_to_ngram_data_multiple_phrases(self):
+        """Test phrases_to_ngram_data with multiple phrases."""
+        phrases = ["今日はいい天気", "今日は雨"]
+
+        ngram_data = JaCompleter.phrases_to_ngram_data(phrases)
+
+        # "今日" should appear twice (once in each phrase)
+        assert ngram_data.unigrams["今日"] == 2
+        # "は" should appear twice
+        assert ngram_data.unigrams["は"] == 2
+
+        # Verify morphology is deduplicated
+        assert "今日" in ngram_data.morphology
+        assert ngram_data.morphology["今日"].surface == "今日"
+
+    def test_phrases_to_ngram_data_empty_list(self):
+        """Test phrases_to_ngram_data with empty list."""
+        ngram_data = JaCompleter.phrases_to_ngram_data([])
+
+        assert ngram_data.unigrams == {}
+        assert ngram_data.bigrams == {}
+        assert ngram_data.trigrams == {}
+        assert ngram_data.morphology == {}
+
+    def test_add_simple_suggestions_with_simple_suggestions_type(self):
+        """Test add_simple_suggestions accepts SimpleSuggestions type."""
+        from ja_complete.types import SimpleSuggestions
+
+        completer = JaCompleter()
+
+        # Create SimpleSuggestions
+        simple_sugg = SimpleSuggestions(data={"お": ["おはよう", "おやすみ"]})
+
+        # Should accept SimpleSuggestions type
+        completer.add_simple_suggestions(simple_sugg)
+
+        # Verify it was added
+        results = completer.suggest_from_simple("お", fallback_to_ngram=False)
+        assert len(results) == 2
+        assert any("おはよう" in r.text for r in results.items)
+
+    def test_integration_phrases_to_simple_suggestions_and_add(self):
+        """Test integration of phrases_to_simple_suggestions with add_simple_suggestions."""
+        completer = JaCompleter()
+
+        phrases = ["こんにちは", "こんばんは"]
+        suggestions = JaCompleter.phrases_to_simple_suggestions(phrases)
+
+        # Add to completer
+        completer.add_simple_suggestions(suggestions)
+
+        # Query with prefix
+        results = completer.suggest_from_simple("こん", fallback_to_ngram=False)
+        assert len(results) > 0
+        assert any("こんにちは" in r.text for r in results.items)

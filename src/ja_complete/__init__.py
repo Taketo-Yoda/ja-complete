@@ -9,6 +9,14 @@ All methods work offline without requiring LLMs or databases.
 """
 
 from ja_complete.completer import JaCompleter
+from ja_complete.types import MorphToken, NgramData, SimpleSuggestions, Suggestion, SuggestionList
 
 __version__ = "0.1.0"
-__all__ = ["JaCompleter"]
+__all__ = [
+    "JaCompleter",
+    "SimpleSuggestions",
+    "MorphToken",
+    "NgramData",
+    "Suggestion",
+    "SuggestionList",
+]

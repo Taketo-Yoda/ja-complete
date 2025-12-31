@@ -7,7 +7,7 @@
 from pydantic import validate_call
 
 from ja_complete.models.base import CompletionModel
-from ja_complete.types import Suggestion, SuggestionList, TopK
+from ja_complete.types import SimpleSuggestions, Suggestion, SuggestionList, TopK
 
 
 class SimpleDictModel(CompletionModel):
@@ -22,21 +22,29 @@ class SimpleDictModel(CompletionModel):
         """空の候補辞書を初期化する。"""
         self.suggestions: dict[str, list[str]] = {}
 
-    def add_suggestions(self, suggestions: dict[str, list[str]]) -> None:
-        """
-        プレフィックスマッピングを追加または更新する。
+    def add_suggestions(self, suggestions: dict[str, list[str]] | SimpleSuggestions) -> None:
+        """プレフィックスマッピングを追加または更新する。
 
         Args:
-            suggestions: プレフィックス -> 補完候補リストのマッピング辞書
+            suggestions: プレフィックス -> 補完候補リストのマッピング辞書、
+                        またはSimpleSuggestions値オブジェクト
 
         Example:
             >>> model = SimpleDictModel()
+            >>> # dict形式
             >>> model.add_suggestions({
             ...     "お": ["おはよう", "おやすみ", "お疲れ様"],
             ...     "あり": ["ありがとう", "ありがとうございます"]
             ... })
+            >>> # SimpleSuggestions形式
+            >>> from ja_complete.types import SimpleSuggestions
+            >>> simple_sugg = SimpleSuggestions(data={"こ": ["こんにちは"]})
+            >>> model.add_suggestions(simple_sugg)
         """
-        self.suggestions.update(suggestions)
+        if isinstance(suggestions, SimpleSuggestions):
+            self.suggestions.update(suggestions.to_dict())
+        else:
+            self.suggestions.update(suggestions)
 
     @validate_call
     def suggest(self, input_text: str, top_k: TopK = 10) -> SuggestionList:
